@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "globalshop:block/server_shop_terminal"
+    }
+  }
+}

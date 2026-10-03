@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "globalshop:shop_terminal",
+    "globalshop:server_shop_terminal"
+  ]
+}
