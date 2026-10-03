@@ -1,5 +1,7 @@
 # GlobalShop 全方位指南
 
+> [English](GUIDE.md) | **简体中文**
+
 > **Minecraft Java Edition 1.20.1 · Forge 47.x**
 > 一个服务器共用一套的经济系统 + 玩家市场 + 官方商店 + 邮箱 + 私聊托管交易 + 会员。
 > 不需要 Vault，不需要任何第三方经济模组。
@@ -232,6 +234,7 @@ Forge 只在启动时读一次配置，并且**不监听文件变化**；原版 
 /globalshop logs [条数]    # 交易日志（上架/购买/下架/管理操作）
 /globalshop ids [条数]     # 当前在架商品的 id
 /globalshop remove <id>    # 强制下架某个商品（物品退回卖家）
+/globalshop accounts       # 列出所有账户及其 UUID 和余额，可按名字过滤
 ```
 
 服务器日志（`logs/latest.log`）里，**被拒绝的操作**会以 `globalshop:` 前缀记录：
@@ -599,6 +602,7 @@ PASS  and it took no money
 | `/globalshop logs [条数]` | 交易日志 |
 | `/globalshop ids [条数]` | 在架商品 id |
 | `/globalshop remove <id>` | 强制下架某个商品 |
+| `/globalshop accounts [名字]` | 列出所有账户（名字 / UUID / 余额），可按名字过滤 |
 | `/money give\|take\|set <玩家> <金额>` | 发钱 / 收钱 / 设余额 |
 
 ---
