@@ -9,6 +9,11 @@ Every player on the server trades in **one** market. Balances, listings, escrowe
 and ownership all live in the **server's world save**. The client only draws what the
 server sends it.
 
+> **Just want to use it?** Read the [user guide](GUIDE.md) instead — it covers
+> installation, first-time setup for an operator, every player-facing feature, the full
+> command table, every config key, and the design trade-offs. This README is the
+> per-version change log: what was added, and why each decision was made.
+
 ---
 
 ## 1. Requirements
@@ -32,7 +37,7 @@ server sends it.
 gradlew.bat build
 ```
 
-The jar lands in `build/libs/globalshop-1.0.0.jar`.
+The jar lands in `build/libs/globalshop-1.1.0.jar`.
 
 > **If `gradlew` cannot download Gradle**, the wrapper points at a mirror because
 > `services.gradle.org` redirects to GitHub, which is unreachable from some networks.
@@ -48,7 +53,7 @@ The jar lands in `build/libs/globalshop-1.0.0.jar`.
 
 ## 3. Installing
 
-Copy `globalshop-1.0.0.jar` into the `mods/` folder.
+Copy `globalshop-1.1.0.jar` into the `mods/` folder.
 
 ### Client vs server — this matters
 
@@ -410,7 +415,7 @@ $env:JAVA_TOOL_OPTIONS = "-Dglobalshop.selftest=true"; ./gradlew.bat runServer
 
 The result appears in the server log as a series of `[selftest] PASS/FAIL` lines ending
 in `RESULT n passed, m failed, k skipped`. A clean run reports
-`RESULT 492 passed, 0 failed, 0 skipped`. The test is repeatable: it removes the listings
+`RESULT 544 passed, 0 failed, 0 skipped`. The test is repeatable: it removes the listings
 it creates, drains the mailboxes it used and restores the balances it touched, so running
 it twice against the same world gives the same result. It does leave two reserved
 accounts (`GS_Alice`, `GS_Bob`) with a zero balance behind.
@@ -577,8 +582,23 @@ src/main/java/com/example/globalshop/
 ├── event/ShopEvents.java    commands, login, mailbox, lifecycle
 └── test/SelfTest.java       the in-game verification
 tools/make_textures.py       regenerates the item and block textures
+tools/make_mod_icon.py       draws the 256x256 mod icon (mods.toml logoFile)
 tools/make_gui_preview.py    renders the window as an image, for reviewing the layout
+tools/check_guide_parity.py  checks the two guides still say the same things
+tools/check_docs_against_code.py  checks the guide's commands and config defaults against the code
 ```
+
+### Keeping the guide true
+
+`tools/check_docs_against_code.py` compares the user guide against the code it documents: every
+`/globalshop` subcommand it names must be registered, and every config default it prints must match
+`Config.java`. It was written after the guide spent two versions telling people to type
+`/globalshop vip info` and `/globalshop unlistall` — commands that did not exist. Run it after
+touching the command tree, `Config.java`, or either guide.
+
+`tools/check_guide_parity.py` compares the English and Chinese guides on the parts that must match
+regardless of language: every backticked token, every number, the heading count and levels, and the
+code blocks. Prose is deliberately not compared.
 
 ### Changing the window layout
 
@@ -596,6 +616,52 @@ overflowing its panel, all of which a compiler cannot see. Three rules keep it h
 * each tab draws its **worst case**, not an easy one — the market tab shows the viewer's
   own, enchanted, already-used tool, because drawing a plain item is how the durability
   readout and the owned badge came to be stacked on top of each other unnoticed.
+
+## New in 1.1.0
+
+### The auction house
+
+A second way to sell, alongside fixed-price lots: bidders compete, the seller sets a starting price
+and a minimum increment, and may add a buyout price that ends it instantly.
+
+* **Bids are deducted immediately.** There is no "reserved" flag: the money leaves the balance and is held by the auction. That is what makes bidding the same money on two auctions impossible, and what makes a crash mid-auction refundable.
+* **Being outbid refunds at once**, not when the auction ends.
+* **Anti-sniping**: a bid inside the last 30 seconds puts the time left back to 30 seconds, repeating until half a minute passes with nobody bidding. Because the window and the reset are the same length, it can only extend an auction, never shorten one.
+* **Everything settles through the mailbox**, never straight into a backpack.
+* **One clock**: every packet carries the server's timestamp and each client counts down from the difference, so a wrong machine clock or another time zone changes nothing.
+
+### The mailbox is bounded by time now, not by count
+
+`mailboxLimit` is gone. A mailbox takes whatever arrives and deletes anything older than
+`mailLifetimeDays`, so a delivery is never refused for want of room and a box never grows without
+end. Expired mail is deleted rather than kept as a greyed-out entry.
+
+### Titles, check-in, teleport, PvP and the bank
+
+What else arrived in 1.1.0, in one place:
+
+| Feature | Where | In short |
+|---|---|---|
+| **Custom titles** | the *Titles* button | A word in front of your name, up to seven characters, priced by what you type: 50,000 for letters and digits, 250,000 the moment a symbol is involved. |
+| **Daily check-in** | the *Check-in* button | One claim a day, weeks running Monday to Monday, the seventh day paying seven times the first. A missed day can be made up at half pay for a flat fee. |
+| **Teleport** | the *Teleport* button | A random jump with a safety scan, or a request to a named player that waits for them to accept. Twenty coins, two cooldowns, and the request arrives in chat as buttons to click. |
+| **PvP** | the *PvP* button | Duels by consent. The loser pays one to twenty percent of a 30,000 stake and it goes **to the winner** rather than into the void, and nobody can be left in debt by it. |
+| **Bank** | the *Bank* button | Deposits earn 0.5% per **real** day; loans cost 2% per **game** day against a fixed ceiling. Interest is added to what is owed and then the wallet is emptied into it, and a balance never goes negative. |
+| **The side column turns over** | the arrows at the bottom | Ten features in a column that pages, with a second page of thirty-two places for whatever comes next. |
+| **Trade log types** | the *Trade log* | Every entry is tagged by kind, so a purchase, a sale, a commission and an auction settlement can be told apart at a glance. |
+| **Balances update themselves** | everywhere | Every change to a balance is pushed to the client, so the number on screen is never one action behind and pressing refresh is not a step anybody has to remember. |
+
+## 13. License
+
+MIT — see [LICENSE](LICENSE).
+
+You may use, modify and redistribute this mod, including inside modpacks and on a server you run
+for other people, provided the copyright notice and the licence text stay with it. There is no
+warranty of any kind.
+
+The jar declares `license="MIT"` in its `mods.toml`; that value comes from `mod_license` in
+`gradle.properties`, so the licence the players see and the one in the repository cannot drift
+apart.
 
 ## New in this version
 
@@ -743,8 +809,8 @@ answer to "where did my purchase go?", and every mail is labelled with the shop 
 
 | | |
 |---|---|
-| Limit | `mailboxLimit`, default **100** deliveries |
-| Lifetime | `mailLifetimeDays`, default **14** real days |
+| Limit | **None** (it takes whatever arrives) |
+| Lifetime | `mailLifetimeDays`, default **14** real days, then it is **deleted automatically** |
 | Claim | **left-click** a mail |
 | Delete | **right-click** a mail |
 
@@ -753,14 +819,13 @@ that is what the player experienced.
 
 ### The rules that matter
 
-**A purchase is refused before any money moves** if the goods could go neither to the backpack nor
-to the mailbox. The player is told to clear space. Selling somebody something and then destroying it
-is not an option, and refusing afterwards would mean unwinding a payment that already went through.
+**There is no capacity limit, so a delivery is never refused because the mailbox is full.** Goods go
+to the backpack or to the mailbox and never onto the floor — something dropped at a player's feet is
+eaten by a hopper or the despawn timer, which is indistinguishable from destroying it.
 
-**Lapsed mail cannot be claimed, only deleted.** It stays visible and greyed so the player can see
-what they lost and why, rather than it vanishing silently. Lapsed mail does not count against the
-limit either — a full mailbox of old mail clears itself when new mail arrives, so a player cannot be
-locked out of receiving anything ever again.
+**Past its lifetime a mail deletes itself.** There is no "expired but still sitting there" state to
+clear out by hand: at the end of its life it stops existing, so the box is bounded by time instead
+of by count, and a player never has to tidy up a pile of old mail.
 
 **A partial claim does not restart the clock.** If only part of a delivery fits, the remainder stays
 as mail with its *original* creation time. Re-stamping it would let a player keep a delivery alive

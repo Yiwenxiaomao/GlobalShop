@@ -47,10 +47,41 @@ public final class TradeLogEntry {
         /** The seller changed price, stock or the purchase-size limits. */
         MODIFY,
         /** An operator force-removed a listing. */
-        ADMIN_REMOVE;
+        ADMIN_REMOVE,
+        /**
+         * An auction ended with a winner.
+         *
+         * <p>In the same log as everything else on purpose: a player who wants to know what they
+         * have been buying should not have to remember which of two windows a sale went through.
+         * The actor is the winner and the seller is the seller, so it appears in both histories.
+         */
+        AUCTION,
+        /** Bought from the official server shop. The other side is the server, not a player. */
+        SERVER_SHOP,
+        /** A two-sided private trade finished: items moved both ways. */
+        PRIVATE_TRADE;
 
         public String translationKey() {
             return "globalshop.log." + name().toLowerCase(Locale.ROOT);
+        }
+
+        /** A short name for the kind, shown as a tag beside a line in the trade history. */
+        public String shortKey() {
+            return "globalshop.logtype." + name().toLowerCase(Locale.ROOT);
+        }
+
+        /**
+         * Whether this is a completed trade, which is what "my trades" is a history of.
+         *
+         * <p>Listing, unlisting and modifying are events on a listing rather than trades — nobody
+         * paid anybody — and an operator removing a listing is not a trade the seller made either.
+         * The window asks about what changed hands, so only these four qualify. Kept as a method on
+         * the enum so a new kind cannot be added and silently left out of the history by forgetting
+         * to update a filter somewhere else.
+         */
+        public boolean isTrade() {
+            return this == PURCHASE || this == AUCTION || this == SERVER_SHOP
+                    || this == PRIVATE_TRADE;
         }
     }
 

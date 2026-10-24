@@ -409,41 +409,65 @@ public class ShopSavedData extends SavedData {
     // Mailbox: deliveries that could not be handed over
     // ------------------------------------------------------------------
 
-    /** Files a delivery, making room from lapsed mail if it has to.
+    /**
+     * Files a delivery.
      *
-     * @return whether it was accepted; {@code false} means the mailbox is full of live mail
+     * <p>There is no capacity limit. The mailbox is bounded by <em>time</em> instead: anything past
+     * the mail lifetime is deleted, so a box cannot grow without bound, and a player can never be
+     * locked out of receiving something because they were away when it arrived. Every delivery is
+     * therefore accepted, which is why the return value is now always {@code true} — it is kept so
+     * the callers that were written against a limit did not all have to be rewritten at once.
+     *
+     * <p>Expired mail is cleared on the way in as well, so a box nobody has opened in months does
+     * not hand a player a list of dead entries the moment they look.
      */
     boolean addMail(UUID owner, Mail mail, long now) {
         List<Mail> mails = mailbox.computeIfAbsent(owner, key -> new ArrayList<>());
-        if (mails.size() >= com.example.globalshop.Config.mailboxLimit()) {
-            // Lapsed mail holds nothing the player could still claim, so discarding it to make
-            // room costs them nothing -- and it means a mailbox full of old mail clears itself
-            // instead of locking the player out of receiving anything ever again.
-            mails.removeIf(existing -> existing.isExpired(now));
-            if (mails.isEmpty()) {
-                mailbox.remove(owner);
-                mails = mailbox.computeIfAbsent(owner, key -> new ArrayList<>());
-            }
-        }
-        if (mails.size() >= com.example.globalshop.Config.mailboxLimit()) {
-            return false;
-        }
+        purgeExpired(mails, now);
         mails.add(mail);
         return true;
     }
 
+    /** Deletes everything in this list that is past its lifetime. @return how many went */
+    int purgeExpired(List<Mail> mails, long now) {
+        if (mails.isEmpty()) {
+            return 0;
+        }
+        int before = mails.size();
+        mails.removeIf(mail -> mail.isExpired(now));
+        return before - mails.size();
+    }
+
     /**
-     * Whether a new mail would be refused right now.
+     * Deletes this player's expired mail.
      *
-     * <p>Lapsed mail does not block, because {@link #addMail} discards it to make room — so a
-     * player whose mailbox is full of old mail is not locked out.
+     * <p>This is what makes the lifetime real rather than merely visible: mail is not kept in a
+     * lapsed state for the player to clear out by hand, it stops existing. Called from every read
+     * of the mailbox, so what a player is shown is always what is actually still theirs.
+     *
+     * @return how many were deleted
+     */
+    int purgeExpired(UUID owner, long now) {
+        List<Mail> mails = mailbox.get(owner);
+        if (mails == null) {
+            return 0;
+        }
+        int removed = purgeExpired(mails, now);
+        if (mails.isEmpty()) {
+            mailbox.remove(owner);
+        }
+        return removed;
+    }
+
+    /**
+     * Always false: the mailbox has no capacity limit.
+     *
+     * <p>Kept as a method rather than deleted so the callers that ask the question keep compiling
+     * unchanged, and so the answer lives in one place instead of being deleted from four. It is a
+     * real answer, not a stub: with the box unbounded, "is there room" can no longer be no.
      */
     boolean mailSpaceFull(UUID owner, long now) {
-        List<Mail> mails = mailbox.get(owner);
-        if (mails == null || mails.size() < com.example.globalshop.Config.mailboxLimit()) {
-            return false;
-        }
-        return mails.stream().noneMatch(mail -> mail.isExpired(now));
+        return false;
     }
 
     /** Live list for one owner. The caller holds the lock and must not keep the list. */

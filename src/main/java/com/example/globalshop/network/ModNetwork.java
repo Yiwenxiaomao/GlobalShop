@@ -1,17 +1,30 @@
 package com.example.globalshop.network;
 
 import com.example.globalshop.GlobalShop;
+import com.example.globalshop.network.packet.BankActionPacket;
+import com.example.globalshop.network.packet.BankDataPacket;
 import com.example.globalshop.network.packet.BlacklistPacket;
 import com.example.globalshop.network.packet.ConversationDataPacket;
+import com.example.globalshop.network.packet.AuctionActionPacket;
+import com.example.globalshop.network.packet.AuctionCreatePacket;
+import com.example.globalshop.network.packet.AuctionDataPacket;
+import com.example.globalshop.network.packet.AuctionToastPacket;
+import com.example.globalshop.network.packet.AuctionUpdatePacket;
+import com.example.globalshop.network.packet.BalanceUpdatePacket;
+import com.example.globalshop.network.packet.CheckinActionPacket;
+import com.example.globalshop.network.packet.CheckinDataPacket;
 import com.example.globalshop.network.packet.CreateListingPacket;
 import com.example.globalshop.network.packet.MailboxActionPacket;
 import com.example.globalshop.network.packet.MailboxDataPacket;
 import com.example.globalshop.network.packet.ModifyListingPacket;
 import com.example.globalshop.network.packet.OpenTradePacket;
 import com.example.globalshop.network.packet.PurchasePacket;
+import com.example.globalshop.network.packet.PvpActionPacket;
+import com.example.globalshop.network.packet.PvpDataPacket;
 import com.example.globalshop.network.packet.RankingDataPacket;
 import com.example.globalshop.network.packet.PlayerListDataPacket;
 import com.example.globalshop.network.packet.RequestConversationPacket;
+import com.example.globalshop.network.packet.RequestAuctionsPacket;
 import com.example.globalshop.network.packet.RequestMailboxPacket;
 import com.example.globalshop.network.packet.RequestPlayerListPacket;
 import com.example.globalshop.network.packet.RequestRankingPacket;
@@ -23,6 +36,10 @@ import com.example.globalshop.network.packet.SendDirectMessagePacket;
 import com.example.globalshop.network.packet.ServerBuyPacket;
 import com.example.globalshop.network.packet.ServerProductAdminPacket;
 import com.example.globalshop.network.packet.ServerRecyclePacket;
+import com.example.globalshop.network.packet.TeleportActionPacket;
+import com.example.globalshop.network.packet.TeleportDataPacket;
+import com.example.globalshop.network.packet.TitleActionPacket;
+import com.example.globalshop.network.packet.TitleDataPacket;
 import com.example.globalshop.network.packet.ServerShopActionResultPacket;
 import com.example.globalshop.network.packet.ServerShopDataPacket;
 import com.example.globalshop.network.packet.ShopActionResultPacket;
@@ -122,6 +139,43 @@ public final class ModNetwork {
                 VipActionPacket::encode, VipActionPacket::decode, VipActionPacket::handle);
         CHANNEL.registerMessage(nextMessageId++, VipStatusDataPacket.class,
                 VipStatusDataPacket::encode, VipStatusDataPacket::decode, VipStatusDataPacket::handle);
+
+        // The auction house, on the same channel with its own message types for the same reason.
+        CHANNEL.registerMessage(nextMessageId++, RequestAuctionsPacket.class,
+                RequestAuctionsPacket::encode, RequestAuctionsPacket::decode, RequestAuctionsPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, AuctionActionPacket.class,
+                AuctionActionPacket::encode, AuctionActionPacket::decode, AuctionActionPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, AuctionCreatePacket.class,
+                AuctionCreatePacket::encode, AuctionCreatePacket::decode, AuctionCreatePacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, AuctionDataPacket.class,
+                AuctionDataPacket::encode, AuctionDataPacket::decode, AuctionDataPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, AuctionUpdatePacket.class,
+                AuctionUpdatePacket::encode, AuctionUpdatePacket::decode, AuctionUpdatePacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, AuctionToastPacket.class,
+                AuctionToastPacket::encode, AuctionToastPacket::decode, AuctionToastPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, BalanceUpdatePacket.class,
+                BalanceUpdatePacket::encode, BalanceUpdatePacket::decode, BalanceUpdatePacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, TitleActionPacket.class,
+                TitleActionPacket::encode, TitleActionPacket::decode, TitleActionPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, TitleDataPacket.class,
+                TitleDataPacket::encode, TitleDataPacket::decode, TitleDataPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, CheckinActionPacket.class,
+                CheckinActionPacket::encode, CheckinActionPacket::decode, CheckinActionPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, CheckinDataPacket.class,
+                CheckinDataPacket::encode, CheckinDataPacket::decode, CheckinDataPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, TeleportActionPacket.class,
+                TeleportActionPacket::encode, TeleportActionPacket::decode,
+                TeleportActionPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, TeleportDataPacket.class,
+                TeleportDataPacket::encode, TeleportDataPacket::decode, TeleportDataPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, PvpActionPacket.class,
+                PvpActionPacket::encode, PvpActionPacket::decode, PvpActionPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, PvpDataPacket.class,
+                PvpDataPacket::encode, PvpDataPacket::decode, PvpDataPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, BankActionPacket.class,
+                BankActionPacket::encode, BankActionPacket::decode, BankActionPacket::handle);
+        CHANNEL.registerMessage(nextMessageId++, BankDataPacket.class,
+                BankDataPacket::encode, BankDataPacket::decode, BankDataPacket::handle);
 
         // The server shop speaks over the same channel but with its own messages, so a client
         // cannot reach one shop's handler through the other's packet type.

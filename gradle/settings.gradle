@@ -1,0 +1,12 @@
+pluginManagement {
+    repositories {
+        // MinecraftForge's maven hosts the ForgeGradle plugin itself. Keep it first so
+        // the build does not stall on a repository that is unreachable from this
+        // machine (GitHub and services.gradle.org are both blocked here).
+        maven { name = 'MinecraftForge'; url = 'https://maven.minecraftforge.net/' }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'globalshop'

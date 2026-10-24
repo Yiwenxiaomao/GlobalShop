@@ -858,7 +858,11 @@ public final class ShopService {
             List<TradeLogEntry> mine = new ArrayList<>();
             // 0 means "the whole log"; the log is already bounded by the retention setting.
             for (TradeLogEntry entry : data.logTail(0)) {
-                if (entry.kind() != TradeLogEntry.Kind.PURCHASE) {
+                // Only completed trades. This used to accept PURCHASE alone, which silently dropped
+                // every auction sale — the entry was written and then filtered out of the very list
+                // it was written for. The set now lives on the enum as isTrade(), so a new kind
+                // cannot be forgotten here.
+                if (!entry.kind().isTrade()) {
                     continue;
                 }
                 if (playerId.equals(entry.actorId()) || playerId.equals(entry.sellerId())) {
@@ -970,10 +974,17 @@ public final class ShopService {
         return emptied;
     }
 
-    /** Every mail waiting for this player, oldest first. A copy: callers cannot mutate the store. */
+    /**
+     * Every mail waiting for this player, oldest first. A copy: callers cannot mutate the store.
+     *
+     * <p>Expired mail is deleted as a side effect of reading. The mailbox is bounded by time rather
+     * than by count, and this is where that becomes real: a player who has not looked in a month
+     * sees what is actually left, not a list of things they can no longer have.
+     */
     public List<Mail> mailsOf(UUID playerId) {
         ShopSavedData data = data();
         synchronized (data) {
+            purgeExpiredMail(data, playerId);
             return List.copyOf(data.mailsOf(playerId));
         }
     }
@@ -981,7 +992,16 @@ public final class ShopService {
     public int mailCount(UUID playerId) {
         ShopSavedData data = data();
         synchronized (data) {
+            purgeExpiredMail(data, playerId);
             return data.mailCount(playerId);
+        }
+    }
+
+    /** Deletes this player's lapsed mail, marking the store dirty when anything went. */
+    private void purgeExpiredMail(ShopSavedData data, UUID playerId) {
+        if (data.purgeExpired(playerId,
+                com.example.globalshop.servershop.ShopClock.nowMillis()) > 0) {
+            data.setDirty();
         }
     }
 
@@ -1074,6 +1094,54 @@ public final class ShopService {
         ShopSavedData data = data();
         synchronized (data) {
             return data.hasMail(playerId);
+        }
+    }
+
+    /**
+     * Records a completed trade in the shared log, whatever kind it was.
+     *
+     * <p>One entry point for the market, the auction house, the official shop and private trades,
+     * so a player's history has every way of buying in one list — which is the point of it. The
+     * buyer is recorded as the actor and the seller as the seller, the same shape a market
+     * purchase has, so both players' histories pick it up without any extra filtering.
+     *
+     * <p>A server-shop purchase has no player on the other side; its seller is left null, which
+     * matches nobody and therefore shows in the buyer's history only.
+     */
+    public void logTrade(TradeLogEntry.Kind kind, UUID sourceId, UUID buyerId, String buyerName,
+                         @Nullable UUID sellerId, @Nullable String sellerName, ItemStack template,
+                         int quantity, long totalPrice) {
+        int count = Math.max(1, quantity);
+        ShopSavedData data = data();
+        synchronized (data) {
+            data.appendLog(new TradeLogEntry(data.nextSeq(),
+                    com.example.globalshop.servershop.ShopClock.nowMillis(), kind, sourceId,
+                    buyerId, buyerName, sellerId, sellerName, template.copyWithCount(1), count,
+                    totalPrice / count, totalPrice), Config.tradeLogRetention());
+            data.setDirty();
+        }
+    }
+
+    /**
+     * Files a delivery as mail without ever trying the backpack.
+     *
+     * <p>Added for the auction house, which is required to deliver a win to the mailbox and nowhere
+     * else: a win must not depend on how much room the winner happens to have, and the player is
+     * meant to collect it deliberately.
+     *
+     * @return whether it was accepted. {@code false} means the mailbox is full, and the caller is
+     *         expected to keep hold of the goods and try again rather than drop them.
+     */
+    public boolean postMail(UUID playerId, List<ItemStack> items, Mail.Source source) {
+        return fileMail(playerId, items, source);
+    }
+
+    /** Whether this player's mailbox could take one more delivery right now. */
+    public boolean hasMailRoom(UUID playerId) {
+        ShopSavedData data = data();
+        synchronized (data) {
+            return !data.mailSpaceFull(playerId,
+                    com.example.globalshop.servershop.ShopClock.nowMillis());
         }
     }
 

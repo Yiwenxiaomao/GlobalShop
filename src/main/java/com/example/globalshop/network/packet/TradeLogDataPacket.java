@@ -22,9 +22,15 @@ import net.minecraftforge.network.NetworkEvent;
  */
 public class TradeLogDataPacket {
 
-    /** One trade, flattened and already oriented towards the reader. */
+    /**
+     * One trade, flattened and already oriented towards the reader.
+     *
+     * <p>{@code kind} is the enum constant's name — {@code PURCHASE}, {@code AUCTION},
+     * {@code SERVER_SHOP}, {@code PRIVATE_TRADE} — so the screen can say how the item was bought.
+     * Four ways of buying ending in one list is only useful if the list says which was which.
+     */
     public record Line(long timestamp, String itemName, int quantity, long total,
-                       String counterparty, boolean wasSeller) {
+                       String counterparty, boolean wasSeller, String kind) {
     }
 
     private final List<Line> lines;
@@ -46,6 +52,7 @@ public class TradeLogDataPacket {
             buf.writeLong(line.total());
             buf.writeUtf(line.counterparty());
             buf.writeBoolean(line.wasSeller());
+            buf.writeUtf(line.kind());
         }
     }
 
@@ -54,7 +61,7 @@ public class TradeLogDataPacket {
         List<Line> lines = new ArrayList<>(Math.max(0, count));
         for (int i = 0; i < count; i++) {
             lines.add(new Line(buf.readLong(), buf.readUtf(), buf.readVarInt(), buf.readLong(),
-                    buf.readUtf(), buf.readBoolean()));
+                    buf.readUtf(), buf.readBoolean(), buf.readUtf()));
         }
         return new TradeLogDataPacket(lines);
     }
@@ -74,14 +81,17 @@ public class TradeLogDataPacket {
         List<Line> lines = new ArrayList<>();
         for (TradeLogEntry entry : shop.tradesOf(viewerId, 200)) {
             boolean wasSeller = viewerId.equals(entry.sellerId());
-            // The other side of the trade: who bought from them, or who they bought from.
-            String counterparty = wasSeller ? entry.actorName() : entry.sellerName();
+            // A server-shop purchase has nobody on the other side, so it gets no name to read from.
+            String counterparty = entry.kind() == TradeLogEntry.Kind.SERVER_SHOP
+                    ? ""
+                    : (wasSeller ? entry.actorName() : entry.sellerName());
             lines.add(new Line(entry.timestamp(),
                     entry.template().getHoverName().getString(),
                     entry.quantity(),
                     entry.totalPrice(),
                     counterparty == null ? "" : counterparty,
-                    wasSeller));
+                    wasSeller,
+                    entry.kind().name()));
         }
         return new TradeLogDataPacket(lines);
     }

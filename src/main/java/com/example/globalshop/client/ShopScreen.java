@@ -161,6 +161,46 @@ public class ShopScreen extends AbstractContainerScreen<ShopMenu> {
     private Button blacklistButton;
     /** Opens the mailbox, which both shops deliver into when a backpack is full. */
     private Button mailboxButton;
+    private Button auctionButton;
+    private Button titleButton;
+    private Button checkinButton;
+    private Button teleportButton;
+    private Button pvpButton;
+    private Button bankButton;
+    private Button pagerBackButton;
+    private Button pagerForwardButton;
+
+    /** Which page of the side column is showing. Page one holds everything built so far. */
+    private int columnPage;
+
+    /**
+     * The buttons that belong to page one of the side column.
+     *
+     * <p>Kept as a list because showing or hiding a page means touching all of them at once, and
+     * nine separate assignments in the refresh method is nine chances to forget one.
+     */
+    private final java.util.List<Button> columnPageOne = new java.util.ArrayList<>();
+
+    /**
+     * What page two hid, so that exactly those can be put back.
+     *
+     * <p>Not "everything the screen renders": that is what page two hides, and while it is hidden
+     * only this list knows which ones were visible beforehand. Without it the widgets this method
+     * never touches — the tabs, the search box, the sort buttons — stayed hidden for good, and
+     * returning to page one gave a window with no tabs and no search box, which is exactly what
+     * happened.
+     */
+    private final java.util.List<net.minecraft.client.gui.components.AbstractWidget>
+            hiddenForPageTwo = new java.util.ArrayList<>();
+
+    /**
+     * The thirty-two places on page two, as buttons.
+     *
+     * <p>One per cell, each covering its cell and the pixel beneath it so no click slips between them
+     * and reaches the backpack the cover is hiding. They do nothing yet on purpose: the page exists
+     * so that features can be put in these places, and a place that cannot be clicked is not a place.
+     */
+    private final java.util.List<Button> pageTwoCells = new java.util.ArrayList<>();
     /** Opens the private-trade window: the player directory, conversations and payment. */
     private Button tradeButton;
     private Button blockAddButton;
@@ -315,6 +355,78 @@ public class ShopScreen extends AbstractContainerScreen<ShopMenu> {
                         Component.translatable("globalshop.button.trade"), b -> requestTrade())
                 .bounds(gx(ShopLayout.TRADE_BUTTON_X), gy(ShopLayout.TRADE_BUTTON_Y),
                         ShopLayout.TRADE_BUTTON_W, ShopLayout.TRADE_BUTTON_H).build());
+        // The auction house is its own window rather than a tab of this one, so this only opens it.
+        // Nothing is asked of the server to open it either: the new window requests its own list,
+        // and carries the clock it needs to count down with.
+        auctionButton = addRenderableWidget(Button.builder(
+                        Component.translatable("globalshop.button.auction"),
+                        b -> ClientScreens.openAuction())
+                .bounds(gx(ShopLayout.SIDE_X), gy(ShopLayout.AUCTION_BUTTON_Y),
+                        ShopLayout.SIDE_W, ShopLayout.SIDE_H).build());
+        // The title window, in the lower-right. It asks the server for the current state rather
+        // than opening empty, so the field starts with whatever is already being worn.
+        titleButton = addRenderableWidget(Button.builder(
+                        Component.translatable("globalshop.button.title"),
+                        b -> ModNetwork.sendToServer(new com.example.globalshop.network.packet
+                                .TitleActionPacket(
+                                com.example.globalshop.network.packet.TitleActionPacket.OPEN, "")))
+                .bounds(gx(ShopLayout.TITLE_BUTTON_X), gy(ShopLayout.TITLE_BUTTON_Y),
+                        ShopLayout.TITLE_BUTTON_W, ShopLayout.TITLE_BUTTON_H).build());
+        // The check-in, in the side column's sixth slot — the first of the five that were added
+        // when the column was halved to make room for ten features.
+        checkinButton = addRenderableWidget(Button.builder(
+                        Component.translatable("globalshop.button.checkin"),
+                        b -> ModNetwork.sendToServer(new com.example.globalshop.network.packet
+                                .CheckinActionPacket(
+                                com.example.globalshop.network.packet.CheckinActionPacket.OPEN, 0)))
+                .bounds(gx(ShopLayout.SIDE_X), gy(ShopLayout.CHECKIN_BUTTON_Y),
+                        ShopLayout.SIDE_W, ShopLayout.SIDE_H).build());
+        // The teleport window, seventh in the column. Like the check-in it asks the server for its
+        // state rather than opening empty, because what it shows is a request that already exists.
+        teleportButton = addRenderableWidget(Button.builder(
+                        Component.translatable("globalshop.button.teleport"),
+                        b -> ModNetwork.sendToServer(new com.example.globalshop.network.packet
+                                .TeleportActionPacket(
+                                com.example.globalshop.network.packet.TeleportActionPacket.OPEN, "")))
+                .bounds(gx(ShopLayout.SIDE_X), gy(ShopLayout.TELEPORT_BUTTON_Y),
+                        ShopLayout.SIDE_W, ShopLayout.SIDE_H).build());
+        // The eighth slot: PvP. It asks the server for its state, because the answer depends on
+        // who else has opted in right now.
+        pvpButton = addRenderableWidget(Button.builder(
+                        Component.translatable("globalshop.button.pvp"),
+                        b -> ModNetwork.sendToServer(new com.example.globalshop.network.packet
+                                .PvpActionPacket(
+                                com.example.globalshop.network.packet.PvpActionPacket.OPEN, "")))
+                .bounds(gx(ShopLayout.SIDE_X), gy(ShopLayout.PVP_BUTTON_Y),
+                        ShopLayout.SIDE_W, ShopLayout.SIDE_H).build());
+        columnPageOne.add(pvpButton);
+        // The ninth slot: the bank. It asks for its numbers rather than opening empty, because
+        // interest may have accrued since the last time it was looked at.
+        bankButton = addRenderableWidget(Button.builder(
+                        Component.translatable("globalshop.button.bank"),
+                        b -> ModNetwork.sendToServer(new com.example.globalshop.network.packet
+                                .BankActionPacket(
+                                com.example.globalshop.network.packet.BankActionPacket.OPEN, "")))
+                .bounds(gx(ShopLayout.SIDE_X), gy(ShopLayout.BANK_BUTTON_Y),
+                        ShopLayout.SIDE_W, ShopLayout.SIDE_H).build());
+        columnPageOne.add(bankButton);
+        // The tenth slot: a pager split down the middle. Back on the left, forward on the right.
+        pagerBackButton = addRenderableWidget(Button.builder(Component.literal("<"),
+                        b -> switchColumnPage(-1))
+                .bounds(gx(ShopLayout.PAGER_BACK_X), gy(ShopLayout.PAGER_BUTTON_Y),
+                        ShopLayout.PAGER_HALF_W, ShopLayout.SIDE_H).build());
+        pagerForwardButton = addRenderableWidget(Button.builder(Component.literal(">"),
+                        b -> switchColumnPage(1))
+                .bounds(gx(ShopLayout.PAGER_FORWARD_X), gy(ShopLayout.PAGER_BUTTON_Y),
+                        ShopLayout.PAGER_HALF_W, ShopLayout.SIDE_H).build());
+        columnPageOne.add(rankingButton);
+        columnPageOne.add(tradeLogButton);
+        columnPageOne.add(blacklistButton);
+        columnPageOne.add(mailboxButton);
+        columnPageOne.add(auctionButton);
+        columnPageOne.add(checkinButton);
+        columnPageOne.add(teleportButton);
+        buildPageTwoCells();
         blockAddButton = addRenderableWidget(Button.builder(
                         Component.translatable("globalshop.button.block_add"), b -> blockFromSlot())
                 .bounds(gx(ShopLayout.BLOCK_ADD_X), gy(ShopLayout.P_BUTTON_Y),
@@ -415,7 +527,204 @@ public class ShopScreen extends AbstractContainerScreen<ShopMenu> {
      * only offered unlisting from a separate tab, which left players who had just listed
      * something by mistake with no visible way to undo it.
      */
+    /**
+     * Page two of the side column: sixteen empty places for the next sixteen features.
+     *
+     * <p>Drawn as empty slots rather than as sixteen disabled buttons, because an empty slot is what
+     * it is — somewhere a feature is going to go. A greyed-out button would claim there is something
+     * there that cannot be pressed.
+     */
+    private void paintPageTwoCover(net.minecraft.client.gui.GuiGraphics graphics) {
+        // Painted over, not merely un-widgetted. Hiding widgets handles the buttons and the boxes,
+        // but the item grid, the listing panel and the backpack are drawn rather than being widgets,
+        // so they survived the page turn and the second page came out as a jumble of both.
+        //
+        // The whole window except the two arrow buttons. An earlier version stopped at the pager's
+        // row and left the bottom row of slots showing their top halves, because the hotbar sits a
+        // little lower than the pager does; covering everything but the arrows cannot be wrong
+        // whatever the slot positions turn out to be.
+        int pagerTop = gy(ShopLayout.PAGER_BUTTON_Y) - 2;
+        // The window's real bottom, not imageHeight's idea of it. The first version trusted that
+        // field and the bottom row of slots kept showing, so it is clearly smaller than the window;
+        // taking the larger of the two cannot be wrong either way.
+        int pagerBottom = Math.max(topPos + this.imageHeight,
+                gy(ShopLayout.PAGER_BUTTON_Y + ShopLayout.SIDE_H) + 2);
+        graphics.fill(leftPos, topPos, leftPos + this.imageWidth, pagerTop, 0xFFC6C6C6);
+        graphics.fill(leftPos, pagerTop, gx(ShopLayout.PAGER_BACK_X), pagerBottom, 0xFFC6C6C6);
+        graphics.fill(gx(ShopLayout.PAGER_BACK_X + ShopLayout.PAGER_HALF_W), pagerTop,
+                gx(ShopLayout.PAGER_FORWARD_X), pagerBottom, 0xFFC6C6C6);
+        graphics.fill(gx(ShopLayout.PAGER_FORWARD_X + ShopLayout.PAGER_HALF_W), pagerTop,
+                leftPos + this.imageWidth, pagerBottom, 0xFFC6C6C6);
+        // Nothing is drawn for the places themselves: they are thirty-two real buttons and their
+        // own appearance is the appearance. Painting cells over them is what made three rounds of
+        // this confusing — the player was looking at rectangles and saying, correctly, that there
+        // were no buttons.
+    }
+
+    /**
+     * A copy of a slot that reports itself inactive while page two is showing.
+     *
+     * <p>It reads and writes the same container at the same index, so the items are the same items.
+     * The only thing it changes is whether the container draws and accepts them, which is what
+     * {@code isActive} is consulted for — this project already relies on that for its tabs.
+     */
+    private static final class PageTwoSlot extends net.minecraft.world.inventory.Slot {
+
+        private final net.minecraft.world.inventory.Slot original;
+        private final boolean[] hidden;
+
+        PageTwoSlot(net.minecraft.world.inventory.Slot original, boolean[] hidden) {
+            super(original.container, original.getContainerSlot(), original.x, original.y);
+            this.original = original;
+            this.hidden = hidden;
+        }
+
+        @Override
+        public boolean isActive() {
+            return !hidden[0] && original.isActive();
+        }
+
+        @Override
+        public net.minecraft.world.item.ItemStack getItem() {
+            return original.getItem();
+        }
+
+        @Override
+        public void set(net.minecraft.world.item.ItemStack stack) {
+            original.set(stack);
+        }
+
+        @Override
+        public void setChanged() {
+            original.setChanged();
+        }
+
+        @Override
+        public boolean mayPlace(net.minecraft.world.item.ItemStack stack) {
+            return original.mayPlace(stack);
+        }
+
+        @Override
+        public boolean mayPickup(net.minecraft.world.entity.player.Player player) {
+            return original.mayPickup(player);
+        }
+    }
+
+    /** Swapped in place of the real slots while page two shows; empty the rest of the time. */
+    private final java.util.List<net.minecraft.world.inventory.Slot> realSlots =
+            new java.util.ArrayList<>();
+    private final boolean[] pageTwoHidingSlots = {false};
+
+    /**
+     * Hides or restores the backpack.
+     *
+     * <p>Neither painting over the slots nor moving them was available: the items are drawn by
+     * AbstractContainerScreen's own private loop, after anything this class paints, and Slot.x and
+     * Slot.y are final. Every slot is therefore replaced by a copy of itself that reports inactive,
+     * which that same loop does consult. The copies share the container and the index, so the items
+     * are untouched — only whether they are drawn, and whether a click can reach them.
+     */
+    private void setSlotsHidden(boolean hidden) {
+        java.util.List<net.minecraft.world.inventory.Slot> slots = this.menu.slots;
+        pageTwoHidingSlots[0] = hidden;
+        if (hidden) {
+            if (!realSlots.isEmpty()) {
+                return;
+            }
+            for (int i = 0; i < slots.size(); i++) {
+                realSlots.add(slots.get(i));
+                slots.set(i, new PageTwoSlot(realSlots.get(i), pageTwoHidingSlots));
+            }
+            return;
+        }
+        if (realSlots.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < realSlots.size() && i < slots.size(); i++) {
+            slots.set(i, realSlots.get(i));
+        }
+        realSlots.clear();
+    }
+
+    /**
+     * Lays out page two's places. Called once, from init: the grid does not move, so the buttons do
+     * not need rebuilding when the page turns — only showing.
+     */
+    private void buildPageTwoCells() {
+        for (int row = 0; row < ShopLayout.PAGE2_ROWS; row++) {
+            for (int col = 0; col < ShopLayout.PAGE2_COLS; col++) {
+                int x = gx(ShopLayout.PAGE2_X + col * (ShopLayout.PAGE2_CELL_W + 1));
+                int y = gy(ShopLayout.PAGE2_Y + row * (ShopLayout.PAGE2_CELL_H + 1));
+                // No label and no action: the cell's own drawing is the appearance, and there is
+                // nothing for a click to do until a feature is put here.
+                Button cell = addRenderableWidget(Button.builder(Component.empty(), b -> {
+                            // A place with nothing in it yet, and it says so. Client-side on purpose:
+                            // there is no feature to ask the server about, and this is not a feature —
+                            // it is what makes a place distinguishable from a decoration, which is the
+                            // confusion that took several rounds to settle.
+                            if (net.minecraft.client.Minecraft.getInstance().player != null) {
+                                net.minecraft.client.Minecraft.getInstance().player.displayClientMessage(
+                                        Component.translatable("globalshop.page2.empty"), false);
+                            }
+                        })
+                        .bounds(x, y, ShopLayout.PAGE2_CELL_W + 1, ShopLayout.PAGE2_CELL_H + 1)
+                        .build());
+                // Hidden from the start. refreshWidgets only ever speaks about these on page two, so
+                // anything visible at creation is visible on page one too — which is exactly what
+                // happened: thirty-two buttons drawn straight across the market window.
+                cell.visible = false;
+                pageTwoCells.add(cell);
+            }
+        }
+    }
+
+    /** Moves the side column one page, clamped at both ends. */
+    private void switchColumnPage(int delta) {
+        columnPage = Math.max(0, Math.min(ShopLayout.COLUMN_PAGES - 1, columnPage + delta));
+        refreshWidgets();
+    }
+
     private void refreshWidgets() {
+        // Whatever page two hid comes back first, before anything decides what should be visible.
+        // The rest of this method knows the widgets it manages; the ones it has never touched had
+        // nothing to put them back, so page one came back without its tabs or its search box.
+        for (net.minecraft.client.gui.components.AbstractWidget widget : hiddenForPageTwo) {
+            widget.visible = true;
+        }
+        hiddenForPageTwo.clear();
+        // The slots come home before anything decides what the page looks like.
+        setSlotsHidden(false);
+        // And page two's places go away again. Setting this only when they were built was not
+        // enough: the page two branch shows them, and nothing on the way back said otherwise, so
+        // one visit to page two left them across the market window for good. Done here, after the
+        // restore loop, both paths agree every time — and the branch below re-shows them.
+        for (Button cell : pageTwoCells) {
+            cell.visible = false;
+        }
+
+        if (columnPage == 1) {
+            // Page two is a menu of places, not a shop front: everything the market put on screen
+            // belongs to page one, so it all goes, and only the pager comes back. Walking the list
+            // rather than naming each widget means one added later is hidden without being listed.
+            for (net.minecraft.client.gui.components.Renderable renderable : this.renderables) {
+                if (renderable
+                        instanceof net.minecraft.client.gui.components.AbstractWidget widget
+                        && widget.visible) {
+                    widget.visible = false;
+                    hiddenForPageTwo.add(widget);
+                }
+            }
+            pagerBackButton.visible = true;
+            pagerForwardButton.visible = true;
+            pagerBackButton.active = true;
+            pagerForwardButton.active = false;
+            // The places come back too: they were hidden by the loop above along with everything else.
+            for (Button cell : pageTwoCells) {
+                cell.visible = true;
+            }
+            setSlotsHidden(true);
+            return;
+        }
         ListingView selected = selectedListing();
         boolean market = tab == Tab.MARKET;
         boolean mine = tab == Tab.MINE;
@@ -428,6 +737,13 @@ public class ShopScreen extends AbstractContainerScreen<ShopMenu> {
         qtyPlusButton.visible = buyable;
         buyButton.visible = buyable;
         marketUnlistButton.visible = market && owned;
+
+        // The column is the first page's; each half of the pager is greyed at the end it cannot pass.
+        for (Button button : columnPageOne) {
+            button.visible = columnPage == 0;
+        }
+        pagerBackButton.active = columnPage > 0;
+        pagerForwardButton.active = columnPage < ShopLayout.COLUMN_PAGES - 1;
 
         minePrice.setVisible(mine);
         mineStock.setVisible(mine);
@@ -902,6 +1218,14 @@ public class ShopScreen extends AbstractContainerScreen<ShopMenu> {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // On page two the cells are offered the click first, and whatever misses them is swallowed
+        // rather than reaching a backpack slot the cover is hiding. The widgets have to be asked
+        // first — the earlier version returned before super.mouseClicked, which would have made the
+        // cells themselves unclickable the moment they were given anything to do.
+        if (columnPage == 1) {
+            super.mouseClicked(mouseX, mouseY, button);
+            return true;
+        }
         if (button == 0 && tab == Tab.BLACKLIST) {
             List<String> blocked = blockedIds();
             int index = blockedIndexAt(mouseX, mouseY);
@@ -1030,7 +1354,14 @@ public class ShopScreen extends AbstractContainerScreen<ShopMenu> {
                     gx(ShopLayout.INPUT_BOX_X + ShopLayout.INPUT_BOX_W - 1),
                     gy(ShopLayout.INPUT_BOX_Y + ShopLayout.INPUT_BOX_H - 1), C_ACCENT);
         }
-    }
+    
+        if (columnPage == 1) {
+            // Last thing in renderBg, so it covers this method's own drawing and the slot frames,
+            // and so the container's widgets — the thirty-two places and the two arrows — are drawn
+            // on top of it afterwards. Painting it any later puts it over the buttons.
+            paintPageTwoCover(graphics);
+        }
+}
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -1056,6 +1387,14 @@ public class ShopScreen extends AbstractContainerScreen<ShopMenu> {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        if (columnPage == 1) {
+            // Page two's cover is painted in renderBg, before the container draws its widgets, so
+            // that the thirty-two places and the arrows come out on top of it. Here, after the
+            // container, there is nothing left to draw — the cover used to be painted at this point
+            // and it went over the buttons, which is why the page came out blank.
+            return;
+        }
 
         // Kept for the header's hover highlight: the header is drawn by an inner call that has no
         // mouse position of its own.

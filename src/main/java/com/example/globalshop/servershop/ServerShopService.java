@@ -305,6 +305,12 @@ public final class ServerShopService {
                     entry.template(), items, cost));
             data.setDirty();
         }
+        // Also into the shared history, so an official-shop purchase sits beside the player's market
+        // and auction trades instead of in a second log nobody opens. Done outside the lock above,
+        // which is a different lock from the one the shared log takes.
+        com.example.globalshop.shop.ShopServices.get(server).logTrade(
+                com.example.globalshop.shop.TradeLogEntry.Kind.SERVER_SHOP, null, player.getUUID(),
+                player.getGameProfile().getName(), null, null, entry.template(), items, cost);
         return new Outcome(ServerShopResult.SUCCESS, items, cost);
     }
 

@@ -28,6 +28,7 @@
   - [14. Money Ranking and Trade History](#14-money-ranking-and-trade-history)
   - [15. Private Chat and Escrow Trading](#15-private-chat-and-escrow-trading)
   - [16. Membership (VIP)](#16-membership-vip)
+  - [Auction house](#auction-house)
 - [Part 3 · Reference](#part-3--reference)
   - [17. Complete Command List](#17-complete-command-list)
   - [18. Configuration Quick Reference](#18-configuration-quick-reference)
@@ -58,7 +59,7 @@
 ## 2. Installation
 
 1. **Both the server and the client need it.** This is a dual-side mod; mismatched protocol versions will **refuse the connection outright**, rather than mis-parse packets
-2. Put `globalshop-1.0.0.jar` into the `mods/` folder
+2. Put `globalshop-1.1.0.jar` into the `mods/` folder
 3. Start the server once and it will generate `globalshop-common.toml` in `config/`
 
 **Dependencies**: only Forge 47.x and Java 17. No Vault, no other economy mod.
@@ -359,8 +360,8 @@ After a listing has been up longer than `listingLifetimeHours` (default **12 hou
 
 | | |
 |---|---|
-| Cap | `mailboxLimit`, default **100 pieces** |
-| Validity | `mailLifetimeDays`, default **14 days** (real time) |
+| Cap | **None** (it takes whatever arrives) |
+| Validity | `mailLifetimeDays`, default **14 days** (real time), then it is **deleted automatically** |
 | **Left click** | Claim |
 | **Right click** | Delete |
 
@@ -369,10 +370,10 @@ After a listing has been up longer than `listingLifetimeHours` (default **12 hou
 A few rules that matter:
 
 - **One mail = one delivery**, no matter how many slots it needs (128 cobblestone is 1 mail, not 2)
-- **Expired mail cannot be claimed, only deleted**, and is shown greyed out
-- **Expired mail does not count against the cap** — when new mail arrives it automatically clears expired mail to make room, so you will never be permanently blocked by a box of old mail
-- **Partial claims do not reset the timer**: if only part of it fits into the inventory, the rest stays with its **original creation time**; claiming half does not refresh the 14 days
-- **It is refused before money is deducted**: if the items fit neither in the inventory nor in the mailbox, the purchase is **refused in advance**
+- **There is no capacity limit** — so a delivery is **never refused because the mailbox is full**
+- **Past its lifetime a mail deletes itself**: there is no "expired but still sitting there" state to clear out by hand, so a box cannot grow without end
+- **Partial claims do not reset the timer**: if only part of it fits into the inventory, the rest stays with its **original creation time**; claiming half does not refresh those 14 days
+- **Items are never dropped on the floor**: if the inventory will not take them, they become mail
 
 **Mail sources**: inventory full at purchase time, expiry-driven unlisting, admin force-unlisting, and the other party's full inventory during private trading.
 
@@ -549,6 +550,300 @@ Buying again while still within the validity period **adds one more period** on 
 
 ---
 
+## Auction house
+
+**Entry point**: the **bottom of the button column on the left** of the market window — "**Auction house**". It opens its own window, not a tab of the market.
+
+### The window
+
+- **Search box**: search by item name
+- **Two orders**: "**Ending**" (closest to finishing first) or "**Newest**" (most recently listed first)
+- **Each row shows**: item icon, name, **current top bid** (the starting price when nobody has bid), **buyout**, **time left**, **seller name**
+- **Paging**: 8 rows per page, with the page number on the right of the header row
+- Click a row to select it; the smallest accepted bid is shown at the bottom and filled into the bid box
+
+**Countdown format**: under a minute it shows `45s`, under an hour `2:31`, longer `1:04:20`; **it turns red inside the last 30 seconds**.
+
+### Putting something up
+
+Click "**Sell**" to enter the listing form:
+
+| Field | Meaning |
+|---|---|
+| **Starting price** | The first bid must be at least this |
+| **Minimum increment** | Every later bid must beat the standing bid by at least this much |
+| **Buyout** | Optional; if set, the auction can be ended instantly at that price, and it must be **above** the starting price |
+| **Minutes** | The duration; **5 minutes by default**, ceiling set by `auctionMaxMinutes` |
+
+**The item is the stack in your main hand.** The form shows what it is and how many; an empty hand is called out in red. Confirming **takes it out of your hand and holds it** for the auction.
+
+### Bidding and held money
+
+- A bid must be **at least the starting price** and **at least one increment above** the standing bid
+- **A bid is deducted immediately** — the money leaves your balance and is held by the auction house
+- **Being outbid refunds you at once**, not when the auction ends
+- Which is why **money bid on auction A cannot be spent on auction B**; the "**Held**" figure in the top right is your total tied up
+
+> This is deliberate. A "reservation" that only sets a flag without moving the money means the flag and the balance will eventually disagree. Because the money really leaves, "not enough spendable money (held funds included)" is just an ordinary balance check — and if the server dies, the money is sitting safely in the save, still refundable after a restart.
+
+### Anti-sniping (30 seconds)
+
+Once the countdown is inside its **last 30 seconds**, **any bid resets the time left to 30 seconds**.
+
+> Ten seconds left and a bid arrives: thirty seconds left again. It runs down to fifteen and somebody bids: thirty seconds again. That repeats until half a minute passes with nobody bidding.
+> Because the trigger window and the reset are both 30 seconds, the rule can only ever **extend** an auction, never shorten one.
+
+### Finishing and settlement
+
+- **When the countdown ends**: the top bidder gets the item, and the seller is paid **after tax** (the same rate as the market, `marketCommissionPercent`)
+  - **The sale is written into the trade log**, next to ordinary market trades, and visible to both sides
+  - **The seller's balance updates by itself** when the money arrives; there is nothing to refresh
+- **Buyout**: anybody clicking it pays at once, the auction **ends immediately**, and the previous top bidder is **refunded in full**
+- **No bidders**: the item goes **back to the seller**
+- **Mandatory rule**: an item that was sold or returned **always goes to the mailbox**, never straight into a backpack; the player collects it from there
+
+### Notifications
+
+| Situation | How you are told |
+|---|---|
+| You are **in the auction window** and you win or buy out | A **popup in the middle of the screen** |
+| You are **not** in the window | A **chat line**: "Congratulations, you won X. It is in your mailbox." |
+| You are outbid | A refund notice at once (popup if the window is open, chat otherwise) |
+| You are the seller (sold or unsold) | A chat line |
+
+### Why everybody's countdown agrees
+
+The window **never counts down against your own computer's clock**. Every packet carries the **server's current timestamp**, and the client stores:
+
+```
+offset    = serverNow - localNow
+remaining = endTime - (localNow + offset)
+```
+
+So a player in another time zone, a player whose clock is an hour slow, and a player who has just changed their system time all compute the same number of seconds left.
+
+When somebody bids, or the anti-sniping rule fires, the broadcast carries the **new end time and a new server timestamp**, and the client **re-measures the offset** from it. That is why the numbers on two screens change on the same frame.
+
+**The server never asks a client what time it is**, and a time sent by a client is discarded. Every bid and every settlement is validated by the server against its own clock.
+
+The only residual error is the one-way network latency of the packet that carried the timestamp — typically a few tens of milliseconds, less than a frame.
+
+---
+
+## Custom titles
+
+**Entry point**: the **bottom of the button column on the left** of the market window — "**Title**".
+
+Gold buys a **title** that is shown in **front of your name** wherever you speak:
+
+```
+[Title] YourName: hello
+```
+
+### The rules
+
+| Field | Meaning |
+|---|---|
+| **Length limit** | **7 characters** |
+| **Ordinary characters** | Letters, digits, **Chinese**, spaces — each `titleOrdinaryPrice` |
+| **Special characters** | Symbols, punctuation, combining marks — each `titleSpecialPrice`, dearer |
+| **Charging** | **Every save costs**, nothing is owned ✓ **clearing is free** |
+
+### How "a character with a line through it" is charged
+
+That effect is **not** one character with a line drawn on it. It is a letter **plus** a combining
+mark, which is two code points.
+
+So `n̶o̶t̶` is really **3 ordinary characters + 3 special ones = 6 characters**, which makes
+struck-through text noticeably dearer — and that is the intent. `titleSpecialPrice` is five times the
+ordinary price by default.
+
+### What is refused (and costs nothing)
+
+- **More than 7 characters**
+- **A `§`** (a colour code, which would bleed into the rest of the chat line) **or a control code**
+- **Nothing but spaces**
+- **Not enough money**
+
+The window prices what you type **as you type it** — "ordinary 4 x 500, special 2 x 2500, total 7000"
+— so the cost is visible before anything is spent.
+
+---
+
+## Daily check-in
+
+**Entry point**: the **sixth button** in the market window's left column — "**Check-in**".
+
+It runs on the **real calendar** and each day pays more than the last:
+
+| Mon | Tue | Wed | Thu | Fri | Sat | Sun |
+|---|---|---|---|---|---|---|
+| 50 | 100 | 150 | 200 | 250 | 300 | 350 |
+
+### Three rules
+
+1. **Missing a day does not reset anything.** Miss Monday and Tuesday still pays in full; there is no streak to break.
+2. **A missed day goes grey**, showing "missed - 200.00 to make up, pays 25.00", and **clicking it buys it back**.
+3. **A server that first opens on a Wednesday** shows Monday and Tuesday **already grey** and offering a make-up. Nobody is asked to have been online before the server existed.
+
+### A make-up pays half
+
+**A made-up day returns only half of what it was worth**; the other half is destroyed with the fee.
+
+| Day | On the day | Fee | Made up | Net |
+|---|---|---|---|---|
+| Mon | 50 | 200 | **25** | -175 |
+| Thu | 200 | 200 | **100** | -100 |
+| Sun | 350 | 200 | **175** | **-25** |
+
+**No day of the week is worth missing on purpose** — even Sunday, the best of them, is a net loss of 25. That is exactly what the halving is for: paying the full reward would have made skipping the later days profitable from day five onwards, a trap of our own making.
+
+### Resetting
+
+- **Every Monday** the week starts empty; the previous week is cleared and cannot be claimed late.
+- Collecting pays into the balance **at once, and the balance display follows** — the same refresh the market and the auction use.
+
+---
+
+## Teleport
+
+**Entry point**: the **seventh button** in the market window's left column, "**Teleport**" — or the command `/globalshop tp`.
+
+### Two ways to travel
+
+**One: a random jump** is **free**, and throws you somewhere `100` to `teleportMaxDistance` (5000 by default) blocks away, with a cooldown of `teleportCooldownSeconds` (**120 seconds** by default).
+
+The landing place is **checked for safety**:
+- The floor must be **solid** — not air, and with a collision shape.
+- **Two blocks of headroom** above it, or you would arrive suffocating inside a block.
+- **Never** lava, magma, a campfire, fire, soul fire, cactus or powder snow.
+- **Never** into water or lava, **never** the void, **never** above the build height.
+
+If nowhere safe turns up it tries **up to 48 times** and then says so plainly rather than dropping you somewhere fatal.
+
+**Two: asking to visit a named player.** Each one costs `teleportTargetPrice` (20 by default), with a cooldown of `teleportTargetCooldownSeconds` (30 seconds by default).
+
+Click a name in the window to send a request. With a full server, page through the list with the `< 1/2 >` arrows under it — the window has no scrollbar, so the arrows are the only way.
+
+**The money is taken when the teleport actually happens**, not when it is asked for, so **being refused costs you nothing**. If the asker cannot afford it at the moment of accept, they are told so and **the request stays open** — top up and accept again.
+
+- **Nothing happens until the player being visited agrees** — in the chat line or in their own window.
+- A request lapses after `teleportRequestSeconds` (60 seconds by default).
+- **Only one request at a time**; asking somebody else replaces the last one.
+- They can **refuse** it, and you can **cancel** it.
+- If they **log out**, the request is dropped at once rather than leaving you waiting on nobody.
+- **Cross-dimension travel is refused**; that is a different feature.
+
+### Why consent is required
+
+Being able to appear next to anybody on demand would make every other protection pointless: a base, a chest room, a fight in progress. The answer has to come from the player being visited, and it has to be allowed to be no.
+
+### The buttons in chat are real buttons
+
+When a request is sent, the other player's chat shows:
+
+```
+Steve asks to teleport to you.  [Accept]  [Refuse]
+```
+
+### The commands behind it
+
+```
+/globalshop tp            opens the window
+/globalshop tp random     a random jump
+/globalshop tp accept     accept the request waiting for you
+/globalshop tp deny       refuse it
+/globalshop tp cancel     cancel a request you sent
+```
+
+Those are **genuinely clickable**, and clicking one runs `/globalshop tp accept` — the same command you could type. That is why they cannot drift apart from the command, and why the permission check is the ordinary one.
+
+---
+
+## PvP
+
+**Entry point**: the **eighth button** in the market window's left column, "**PvP**".
+
+### Off by default, and it takes both players
+
+**By default no player can hurt another player at all.** That is not a label: the damage genuinely
+does not happen, because the server refuses it.
+
+To turn it on: open the PvP window, press "**Allow PvP: on**", then **click a player in the list who
+has done the same** — and the fight is on.
+
+**Why both sides have to agree.** If one player picking a target were enough, "off by default" would
+mean nothing: anybody could be dragged into a fight by somebody else's choice, and the setting would
+only protect players who were never picked. Two agreements is what makes the switch real.
+
+### Losing costs money
+
+| Setting | Default |
+|---|---|
+| Stake `pvpStake` | 300 coins |
+| Loss `pvpLossMinPercent` to `pvpLossMaxPercent` | **1% to 20%** |
+| What a loss actually costs | **3 to 60 coins**, rolled at random |
+
+- **The dice are rolled at the moment of death**, so neither player knows the figure while fighting.
+- **The money is destroyed**, not paid to the winner — so this cannot become a way to take somebody's money.
+- **Never more than the loser is carrying**, so a duel cannot leave anybody in debt.
+
+### The rest of the rules
+
+- **One duel at a time.**
+- **No cross-dimension fights.**
+- Turning PvP off **ends your fight immediately**.
+- If the other player **logs out**, the fight ends.
+- A server that wants ordinary PvP back sets `pvpRequiresDuel` to `false`, keeping duelling and its stake.
+
+---
+
+## Bank
+
+**Entry point**: the **ninth button** in the market window's left column, "**Bank**".
+
+The window is **split down the middle** — deposits on the left, loans on the right — and both sides
+**refresh themselves**, on the same push the rest of the mod uses.
+
+Each half has a box for a typed amount and a button beside it for all of it: deposit / deposit all,
+withdraw / withdraw all, repay / repay all. **The "all" amounts are worked out on the server**, never
+taken from the client — the client's idea of "everything" can be out of date by a purchase in another
+window or a day of interest. Borrowing has no such button, because there is no such thing as borrowing
+everything.
+
+### The left half: deposits
+
+| Setting | Default |
+|---|---|
+| Interest | **0.5% per real day** (`bankDepositInterestBasisPoints = 50`) |
+
+- **Money in the bank cannot be spent.** That is the point of putting it there.
+- **And it cannot be lost.** Nothing but you and its own interest ever touches a deposit.
+- Paid on the **real** day, so a server that was off for a fortnight still pays for the fortnight: real days really did pass.
+
+### The right half: loans
+
+| Setting | Default |
+|---|---|
+| Interest | **2% per game day** (`bankLoanInterestBasisPoints = 200`) |
+| Limit | `bankLoanLimit`, 5000 coins |
+
+- Charged on the **game** day — twenty minutes of a *running* server.
+- So **a loan does not grow while the server is off**: no game day passed, and being offline is not a punishment for time that did not happen.
+- **The limit is fixed**, not a multiple of your balance. A limit that grows with what you have is not a limit.
+
+**What happens when it cannot be paid.** The interest is added to the debt, and then **the wallet is
+emptied into it** — by account, so an offline borrower is still charged. Whatever is left stays owed
+and **keeps charging**, every game day, until earning something clears it. **The balance never goes
+negative** — nothing else in this mod can do that and the bank is not going to be the first.
+
+### Two rates, two clocks
+
+A deposit is measured on the **wall clock** and a loan on the **world clock** — each against the clock
+it was described in. That is why one is stored in milliseconds and the other in game ticks.
+
+---
+
 # Part 3 · Reference
 
 ## 17. Complete Command List
@@ -631,13 +926,30 @@ Buying again while still within the validity period **adds one more period** on 
 | `maxPerPurchase` | `4096` | Maximum quantity per purchase |
 | `purchaseCooldownMs` | `150` | Anti-spam interval between actions (also used for private chat / trading) |
 | `tradeLogRetention` | `2000` | Number of log entries retained (also used for private chat records) |
+| `auctionLimit` | `5` | Auctions one player may run at once |
+| `auctionMaxMinutes` | `5` | Longest an auction may run (real **minutes**) |
+| `titleOrdinaryPrice` | `50000` | Price of one **ordinary** character in a custom title |
+| `titleSpecialPrice` | `250000` | Price of one **special** character in a custom title |
+| `checkinDailyReward` | `5000` | What **day 1** of the check-in pays; day N pays N times this |
+| `checkinMakeupCost` | `20000` | Flat fee for making up one missed day |
+| `teleportMaxDistance` | `5000` | Furthest a random teleport may throw you |
+| `teleportCooldownSeconds` | `120` | Seconds between random teleports |
+| `teleportTargetCooldownSeconds` | `30` | Seconds between teleports to a named player |
+| `teleportTargetPrice` | `2000` | What one teleport to a named player costs |
+| `pvpStake` | `30000` | The stake a duel is fought over |
+| `pvpLossMinPercent` | `1` | Smallest fraction of it a loss can cost |
+| `pvpLossMaxPercent` | `20` | Largest fraction of it a loss can cost |
+| `pvpRequiresDuel` | `true` | Whether only duelling players may hurt each other |
+| `bankDepositInterestBasisPoints` | `50` | Deposit interest per real day (basis points, 50 = 0.5%) |
+| `bankLoanInterestBasisPoints` | `200` | Loan interest per game day (basis points, 200 = 2%) |
+| `bankLoanLimit` | `500000` | The most a player may owe at once |
+| `teleportRequestSeconds` | `60` | How long a teleport request stays open |
 
 ### Mailbox
 
 | Key | Default | Description |
 |---|---|---|
-| `mailboxLimit` | `100` | Mailbox cap (pieces) |
-| `mailLifetimeDays` | `14` | Mail validity (real days) |
+| `mailLifetimeDays` | `14` | Mail validity (real days), then it is **deleted automatically**; there is no capacity limit |
 
 ### Official shop
 
@@ -745,4 +1057,4 @@ No. But while auto-renew is on you can turn it off at any time; it then simply l
 
 ---
 
-*This guide corresponds to GlobalShop 1.0.0 (Forge 1.20.1-47.x).*
+*This guide corresponds to GlobalShop 1.1.0 (Forge 1.20.1-47.x).*

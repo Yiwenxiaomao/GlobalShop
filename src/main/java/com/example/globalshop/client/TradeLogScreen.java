@@ -113,11 +113,27 @@ public class TradeLogScreen extends Screen {
                             line.quantity(), line.itemName(), line.counterparty())
                     : Component.translatable("globalshop.log.bought_from",
                             line.quantity(), line.itemName(), line.counterparty());
+            if ("SERVER_SHOP".equals(line.kind())) {
+                // The official shop has no player on the other side, so "bought from " would trail
+                // off into nothing. It gets its own phrasing.
+                what = line.wasSeller()
+                        ? Component.translatable("globalshop.log.sold_to",
+                                line.quantity(), line.itemName(), line.counterparty())
+                        : Component.translatable("globalshop.log.bought_server",
+                                line.quantity(), line.itemName());
+            }
+            // The kind, in brackets after the line. The room for the item text is measured with the
+            // tag already taken out, so a long item name is what gets shortened and never the label
+            // that says how the thing was bought.
+            String type = Component.translatable("globalshop.logtype."
+                    + line.kind().toLowerCase(java.util.Locale.ROOT)).getString();
+            String tag = " [" + type + "]";
             Component amount = Component.literal(sign + MoneyFormat.formatCompact(line.total()));
             int amountWidth = this.font.width(amount);
-            int room = AMOUNT_RIGHT_DX - amountWidth - 6 - (PAD + 92);
+            int room = AMOUNT_RIGHT_DX - amountWidth - 6 - (PAD + 92) - this.font.width(tag);
             graphics.drawString(this.font,
-                    Component.literal(this.font.plainSubstrByWidth(what.getString(), Math.max(12, room))),
+                    Component.literal(this.font.plainSubstrByWidth(what.getString(), Math.max(8, room)))
+                            .append(Component.literal(tag)),
                     left + PAD + 92, y, colour, false);
             graphics.drawString(this.font, amount, left + AMOUNT_RIGHT_DX - amountWidth, y, colour, false);
         }

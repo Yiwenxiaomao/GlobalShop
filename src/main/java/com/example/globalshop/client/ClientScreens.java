@@ -67,4 +67,92 @@ public final class ClientScreens {
             Minecraft.getInstance().setScreen(new VipScreen(data));
         }
     }
+
+    // ==================================================================
+    // The auction house
+    // ==================================================================
+
+    /** Opens the auction window. */
+    public static void openAuction() {
+        Minecraft.getInstance().setScreen(new AuctionScreen());
+    }
+
+    /**
+     * Stores a fresh auction list and lets the window redraw from it.
+     *
+     * <p>The cache is updated whether or not a window is open: the list also carries the server's
+     * clock, and that reading is worth keeping even if the player closed the window in the moment
+     * between asking and being answered.
+     */
+    public static void acceptAuctionList(
+            com.example.globalshop.network.packet.AuctionDataPacket data) {
+        ClientAuction.accept(data);
+        if (Minecraft.getInstance().screen instanceof AuctionScreen open) {
+            open.accept(data);
+        }
+    }
+
+    /** Applies a live bid: cache always, redraw only if the window is open. */
+    public static void acceptAuctionUpdate(
+            com.example.globalshop.network.packet.AuctionUpdatePacket update) {
+        ClientAuction.accept(update);
+        if (Minecraft.getInstance().screen instanceof AuctionScreen open) {
+            open.acceptUpdate();
+        }
+    }
+
+    /** The centred popup. Only ever sent to players who have the window open. */
+    public static void showAuctionToast(
+            com.example.globalshop.network.packet.AuctionToastPacket toast) {
+        if (Minecraft.getInstance().screen instanceof AuctionScreen open) {
+            open.showToast(toast);
+        }
+    }
+
+    /**
+     * A balance that changed on its own — an auction settling, a bid being refunded.
+     *
+     * <p>Both caches are told, because either window can be the one on screen, and the next real
+     * list from the server replaces the pushed value.
+     */
+    public static void acceptBalance(
+            com.example.globalshop.network.packet.BalanceUpdatePacket packet) {
+        ClientShopCache.overrideBalance(packet.balance());
+        ClientAuction.overrideBalance(packet.balance());
+    }
+
+    /** Opens the title window, or updates the one already open. */
+    public static void showTitle(com.example.globalshop.network.packet.TitleDataPacket data) {
+        if (Minecraft.getInstance().screen instanceof TitleScreen open) {
+            open.accept(data);
+        } else {
+            Minecraft.getInstance().setScreen(new TitleScreen(data));
+        }
+    }
+
+    /**
+     * Opens the check-in panel, or replaces the one already open.
+     *
+     * <p>Replaced rather than updated in place: unlike the title window there is nothing being typed
+     * here, so the cheapest correct thing is to open the panel again with the new week in it.
+     */
+    public static void showCheckin(com.example.globalshop.network.packet.CheckinDataPacket data) {
+        Minecraft.getInstance().setScreen(new CheckinScreen(data));
+    }
+
+    /** Opens the teleport window, or replaces the one already open with fresher state. */
+    public static void showTeleport(
+            com.example.globalshop.network.packet.TeleportDataPacket data) {
+        Minecraft.getInstance().setScreen(new TeleportScreen(data));
+    }
+
+    /** Opens the PvP window, or replaces the one already open with fresher state. */
+    public static void showPvp(com.example.globalshop.network.packet.PvpDataPacket data) {
+        Minecraft.getInstance().setScreen(new PvpScreen(data));
+    }
+
+    /** Opens the bank, or replaces the one already open with fresher numbers. */
+    public static void showBank(com.example.globalshop.network.packet.BankDataPacket data) {
+        Minecraft.getInstance().setScreen(new BankScreen(data));
+    }
 }

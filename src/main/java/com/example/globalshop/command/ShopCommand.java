@@ -70,6 +70,9 @@ public final class ShopCommand {
                 .then(MoneyCommand.buildMoney("money"))
                 .then(MoneyCommand.buildPay("pay"))
                 .then(Commands.literal("claim").executes(ShopCommand::claim))
+                // The teleport branch exists mainly so the accept and refuse buttons in a request's
+                // chat line can be real commands rather than a special case.
+                .then(com.example.globalshop.command.TeleportCommand.build())
                 .then(vipSubtree())
                 // Everything below is the text form of a window: same service, same rules, so a
                 // player who cannot or will not use the GUI is not a second-class player.
@@ -81,6 +84,7 @@ public final class ShopCommand {
                 .then(buySubtree())
                 .then(mineSubtree())
                 .then(unlistSubtree())
+                .then(Commands.literal("unlistall").executes(ShopCommand::unlistAll))
                 .then(restockSubtree())
                 .then(modifySubtree())
                 .then(blockSubtree(buildContext))
@@ -178,7 +182,7 @@ public final class ShopCommand {
         }
         long now = com.example.globalshop.servershop.ShopClock.nowMillis();
         source.sendSuccess(() -> Component.translatable("globalshop.command.mail_header",
-                mails.size(), Config.mailboxLimit()), false);
+                mails.size()), false);
         for (int i = 0; i < mails.size(); i++) {
             com.example.globalshop.shop.Mail mail = mails.get(i);
             int index = i + 1;
@@ -664,8 +668,24 @@ public final class ShopCommand {
         return result.isSuccess() ? 1 : 0;
     }
 
-    private static LiteralArgumentBuilder<CommandSourceStack> restockSubtree() {
-        return Commands.literal("restock")
+    /**
+     * Takes every one of the player's lots down at once.
+     *
+     * <p>Documented in the guide before it existed — the guide's command table listed
+     * {@code /globalshop unlistall} for two versions while only the window's button could do it.
+     * {@code tools/check_docs_against_code.py} is what found it.
+     */
+    private static int unlistAll(CommandContext<CommandSourceStack> context)
+            throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        CommandSourceStack source = context.getSource();
+        int taken = ShopServices.get(source).unlistAll(player);
+        source.sendSuccess(() -> Component.translatable("globalshop.command.unlistall_done", taken),
+                true);
+        return taken;
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> restockSubtree() {        return Commands.literal("restock")
                 .then(Commands.argument("id", StringArgumentType.string())
                         .executes(ShopCommand::restock));
     }

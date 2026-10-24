@@ -109,6 +109,7 @@ public final class InternalEconomyService implements EconomyService {
             long start = Math.min(Math.max(0L, initialBalance), cap());
             data.putBalance(playerId, start);
             data.setDirty();
+            announce(playerId);
             return TransactionResult.SUCCESS;
         }
     }
@@ -126,6 +127,7 @@ public final class InternalEconomyService implements EconomyService {
         synchronized (data) {
             data.putBalance(playerId, amount);
             data.setDirty();
+            announce(playerId);
             return TransactionResult.SUCCESS;
         }
     }
@@ -149,6 +151,7 @@ public final class InternalEconomyService implements EconomyService {
             }
             data.putBalance(playerId, updated);
             data.setDirty();
+            announce(playerId);
             return TransactionResult.SUCCESS;
         }
     }
@@ -171,6 +174,7 @@ public final class InternalEconomyService implements EconomyService {
             }
             data.putBalance(playerId, current - amount);
             data.setDirty();
+            announce(playerId);
             return TransactionResult.SUCCESS;
         }
     }
@@ -208,8 +212,35 @@ public final class InternalEconomyService implements EconomyService {
             data.putBalance(fromId, fromBalance - amount);
             data.putBalance(toId, credited);
             data.setDirty();
+            announce(fromId);
+            announce(toId);
             return TransactionResult.SUCCESS;
         }
+    }
+
+    /**
+     * Tells a player's client that their balance changed.
+     *
+     * <p>Here, in the one place every balance change goes through, rather than at each call site.
+     * Twice now a feature has taken money and left the window showing the old figure, which reads
+     * exactly like the money was never taken — the auction did it, then PvP and the teleport price
+     * did it again. A rule that lives in the ledger cannot be forgotten by the next feature, and the
+     * bank will get it for free.
+     *
+     * <p>Safe to call while holding the balance lock: writing a packet is not a data access, and the
+     * read below re-enters a lock this thread already holds, which Java's monitors allow.
+     */
+    private void announce(UUID playerId) {
+        net.minecraft.server.level.ServerPlayer player =
+                server.getPlayerList().getPlayer(playerId);
+        if (player == null) {
+            // Nobody to tell. An offline player's balance is written to the save either way, and
+            // they will be given the current figure when they next open a window.
+            return;
+        }
+        com.example.globalshop.network.ModNetwork.sendToPlayer(player,
+                new com.example.globalshop.network.packet.BalanceUpdatePacket(
+                        data().balanceOf(playerId)));
     }
 
     /** Number of accounts on file. Used by the diagnostics command. */

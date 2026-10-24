@@ -43,6 +43,8 @@ public final class ClientShopCache {
     /** Called from the packet handler for a page. */
     public static void accept(ShopDataPacket packet) {
         data = packet;
+        // A real list is the server's own account of the balance, so it replaces any pushed value.
+        balanceOverride = -1L;
     }
 
     /** Called from the packet handler for an action result. */
@@ -78,9 +80,28 @@ public final class ClientShopCache {
         return snapshot == null ? ShopViewState.INITIAL : snapshot.view();
     }
 
+    /**
+     * A balance that arrived on its own, which wins over the last list until a new list arrives.
+     *
+     * <p>Negative means "no override". A full list stays authoritative — it is the server's own
+     * account of the balance — so receiving one clears this rather than being overruled by it. The
+     * reason it exists: an auction settles while the seller is looking at the market, the money
+     * arrives, and the figure on screen would otherwise keep showing the old total until they
+     * pressed refresh. Being told you were paid should not need a button.
+     */
+    private static long balanceOverride = -1L;
+
     public static long balance() {
+        if (balanceOverride >= 0L) {
+            return balanceOverride;
+        }
         ShopDataPacket snapshot = data;
         return snapshot == null ? 0L : snapshot.viewerBalance();
+    }
+
+    /** Applies a balance pushed on its own. */
+    public static void overrideBalance(long value) {
+        balanceOverride = value;
     }
 
     /** @return the status message to show, or {@code null} once it has expired. */

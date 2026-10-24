@@ -1,0 +1,16 @@
+# Line endings are normalised to LF in the repository, whatever machine pushes.
+#
+# This project is developed on Windows, and without this a commit from Windows can turn every file
+# into a whole-file diff the moment somebody on Linux touches it. The files here are written with
+# LF already, so this only stops a future editor from undoing that.
+* text=auto eol=lf
+
+# Batch files are the exception: cmd.exe is happiest with CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary. Git must never try to merge, diff or re-encode these.
+*.png binary
+*.jar binary
+*.ogg binary
+*.nbt binary

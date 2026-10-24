@@ -273,4 +273,20 @@ public final class ShopClock {
         offsetMillis.set(0L);
         lastLookupSucceeded = false;
     }
+
+    /**
+     * Pins the clock to an exact instant, for tests.
+     *
+     * <p>{@link #setDateOverrideForTest} pins a whole day, which is enough for "has the recycling
+     * quota reset" and not enough for anything that cares about seconds. The auction's anti-sniping
+     * rule and its countdown do, and a test that could not place a bid ten seconds before the end
+     * could not prove the rule works at all. The calendar date is kept in step, so the two hooks
+     * can never disagree about what day it is.
+     */
+    public static void setMillisOverrideForTest(@Nullable Long millis) {
+        millisOverride = millis;
+        dateOverride = millis == null
+                ? null
+                : Instant.ofEpochMilli(millis).atZone(zone).toLocalDate();
+    }
 }

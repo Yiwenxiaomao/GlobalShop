@@ -18,6 +18,17 @@ run/crash-reports/
 run-data/
 src/generated/resources/
 
+# More of the dev workspace that is generated rather than written by hand. The eula and
+# server.properties above are the exceptions: they are settings somebody chose.
+run/config/
+run/usercache.json
+run/ops.json
+run/whitelist.json
+run/banned-ips.json
+run/banned-players.json
+hs_err_pid*.log
+replay_pid*.log
+
 # ---------------------------------------------------------------------------
 # IDEs
 # ---------------------------------------------------------------------------

@@ -34,7 +34,9 @@ public final class Mail {
         /** A purchase from another player, or stock returned when a lot was taken down. */
         MARKET("globalshop.mail.source.market"),
         /** Bought from, or sold to, the server's own shop. */
-        SERVER_SHOP("globalshop.mail.source.server_shop");
+        SERVER_SHOP("globalshop.mail.source.server_shop"),
+        /** Won at auction, or returned to the seller when an auction found no bidders. */
+        AUCTION("globalshop.mail.source.auction");
 
         private final String key;
 

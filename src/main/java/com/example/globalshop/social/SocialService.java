@@ -401,6 +401,13 @@ public final class SocialService {
                     MoneyFormat.formatWithName(offer.price())));
         }
         announceOfferChange(buyer.getUUID(), partnerId);
+        // Into the shared history as a private trade. One entry is enough here: the buyer paid and
+        // the seller offered, so the ordinary "bought from / sold to" phrasing is already correct
+        // from both sides, and the tag says how it was agreed.
+        ShopServices.get(server).logTrade(
+                com.example.globalshop.shop.TradeLogEntry.Kind.PRIVATE_TRADE, null, buyer.getUUID(),
+                buyer.getGameProfile().getName(), offer.sellerId(), offer.sellerName(),
+                offer.item(), offer.item().getCount(), offer.price());
         return ShopResult.SUCCESS;
     }
 

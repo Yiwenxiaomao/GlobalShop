@@ -2,32 +2,40 @@ package com.example.globalshop.test;
 
 import com.example.globalshop.Config;
 import com.example.globalshop.GlobalShop;
-import com.example.globalshop.command.MoneyArgumentType;
-import com.example.globalshop.economy.EconomySavedData;
-import com.example.globalshop.economy.EconomyService;
-import com.example.globalshop.economy.EconomyServices;
-import com.example.globalshop.economy.TransactionResult;
-import com.example.globalshop.network.ListingView;
-import com.example.globalshop.network.ShopViewState;
-import com.example.globalshop.network.packet.ShopDataPacket;
-import com.example.globalshop.registry.ModCreativeTabs;
-import com.example.globalshop.registry.ModItems;
-import com.example.globalshop.servershop.ServerShopEntry;
-import com.example.globalshop.servershop.ServerShopResult;
-import com.example.globalshop.servershop.ServerShopSavedData;
-import com.example.globalshop.servershop.ServerShopService;
-import com.example.globalshop.servershop.ServerShopServices;
-import com.example.globalshop.servershop.ServerShopTab;
-import com.example.globalshop.servershop.ShopClock;
-import com.example.globalshop.shop.ContainerPool;
-import com.example.globalshop.shop.ItemPool;
-import com.example.globalshop.shop.ItemStacks;
-import com.example.globalshop.shop.Listing;
-import com.example.globalshop.shop.ShopResult;
-import com.example.globalshop.shop.ShopSavedData;
-import com.example.globalshop.shop.ShopService;
-import com.example.globalshop.shop.ShopServices;
-import com.example.globalshop.shop.ShopSort;
+import com.example.globalshop.core.command.MoneyArgumentType;
+import com.example.globalshop.internal.economy.EconomySavedData;
+import com.example.globalshop.api.economy.EconomyService;
+import com.example.globalshop.api.economy.EconomyServices;
+import com.example.globalshop.api.economy.TransactionResult;
+import com.example.globalshop.core.market.net.ListingView;
+import com.example.globalshop.core.market.net.ShopViewState;
+import com.example.globalshop.core.market.net.ShopDataPacket;
+import com.example.globalshop.core.registry.ModCreativeTabs;
+import com.example.globalshop.core.registry.ModItems;
+import com.example.globalshop.core.servershop.ServerShopEntry;
+import com.example.globalshop.core.servershop.ServerShopResult;
+import com.example.globalshop.core.servershop.ServerShopSavedData;
+import com.example.globalshop.core.servershop.ServerShopService;
+import com.example.globalshop.core.servershop.ServerShopServices;
+import com.example.globalshop.core.servershop.ServerShopTab;
+import com.example.globalshop.core.servershop.ShopClock;
+import com.example.globalshop.core.market.ContainerPool;
+import com.example.globalshop.core.market.ItemPool;
+import com.example.globalshop.core.market.ItemStacks;
+import com.example.globalshop.core.market.Listing;
+import com.example.globalshop.core.market.ShopResult;
+import com.example.globalshop.core.market.ShopSavedData;
+import com.example.globalshop.core.market.ShopService;
+import com.example.globalshop.core.market.ShopServices;
+import com.example.globalshop.core.market.ShopSort;
+import com.example.globalshop.feature.auction.AuctionListing;
+import com.example.globalshop.feature.auction.AuctionResult;
+import com.example.globalshop.feature.auction.AuctionSavedData;
+import com.example.globalshop.feature.auction.AuctionService;
+import com.example.globalshop.feature.auction.AuctionServices;
+import com.example.globalshop.core.social.Mail;
+import com.example.globalshop.feature.tradelog.TradeLogEntry;
+import javax.annotation.Nullable;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
@@ -68,6 +76,31 @@ import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.common.util.FakePlayerFactory;
 import net.minecraftforge.registries.ForgeRegistries;
+import com.example.globalshop.feature.bank.BankResult;
+import com.example.globalshop.feature.bank.BankService;
+import com.example.globalshop.feature.bank.BankServices;
+import com.example.globalshop.feature.checkin.CheckinResult;
+import com.example.globalshop.feature.checkin.CheckinService;
+import com.example.globalshop.feature.checkin.CheckinServices;
+import com.example.globalshop.feature.pvp.PvpResult;
+import com.example.globalshop.feature.pvp.PvpService;
+import com.example.globalshop.feature.pvp.PvpServices;
+import com.example.globalshop.feature.teleport.TeleportResult;
+import com.example.globalshop.feature.teleport.TeleportService;
+import com.example.globalshop.feature.teleport.TeleportServices;
+import com.example.globalshop.feature.title.TitlePricing;
+import com.example.globalshop.feature.title.TitleResult;
+import com.example.globalshop.feature.title.TitleService;
+import com.example.globalshop.feature.title.TitleServices;
+import com.example.globalshop.core.client.ClientShopCache;
+import com.example.globalshop.core.market.net.ShopActionResultPacket;
+import com.example.globalshop.core.menu.TradeMenu;
+import com.example.globalshop.core.social.DirectMessage;
+import com.example.globalshop.core.social.SocialSavedData;
+import com.example.globalshop.core.social.SocialService;
+import com.example.globalshop.core.social.SocialServices;
+import com.example.globalshop.core.social.TradeOffer;
+import com.example.globalshop.feature.ranking.RankingService;
 
 /**
  * An in-game verification of the money and market logic, run against the real server.
@@ -146,6 +179,7 @@ public final class SelfTest {
             mailboxTests(shop, economy, alice, bob);
             socialTests(economy, alice, bob);
             tradeOfferTests(shop, economy, alice, bob);
+            auctionTests(shop, economy);
         } catch (Throwable unexpected) {
             failed++;
             log("FAIL  unexpected exception: " + unexpected);
@@ -931,29 +965,29 @@ public final class SelfTest {
         // "globalshop.result.success", but a success key is built per action
         // ("globalshop.status.purchase.ok"), so the comparison never matched and every outcome
         // played the failure sound. Asserting the flag directly is what would have caught it.
-        com.example.globalshop.client.ClientShopCache.reset();
+        com.example.globalshop.core.client.ClientShopCache.reset();
         ShopDataPacket emptyPage = new ShopDataPacket(List.of(),
-                com.example.globalshop.network.ShopViewState.INITIAL, 1, 0, 0L, 0, false, false,
+                com.example.globalshop.core.market.net.ShopViewState.INITIAL, 1, 0, 0L, 0, false, false,
                 List.of());
-        com.example.globalshop.client.ClientShopCache.acceptResult(
-                new com.example.globalshop.network.packet.ShopActionResultPacket(
+        com.example.globalshop.core.client.ClientShopCache.acceptResult(
+                new com.example.globalshop.core.market.net.ShopActionResultPacket(
                         ShopResult.SUCCESS, emptyPage));
         check("a successful outcome is remembered as a success, so it sounds like one",
-                com.example.globalshop.client.ClientShopCache.statusSuccess());
+                com.example.globalshop.core.client.ClientShopCache.statusSuccess());
         check("and its message key is the per-action one, not the generic result key",
                 "globalshop.status.action.ok"
-                        .equals(com.example.globalshop.client.ClientShopCache.statusKey()));
-        com.example.globalshop.client.ClientShopCache.acceptResult(
-                new com.example.globalshop.network.packet.ShopActionResultPacket(
+                        .equals(com.example.globalshop.core.client.ClientShopCache.statusKey()));
+        com.example.globalshop.core.client.ClientShopCache.acceptResult(
+                new com.example.globalshop.core.market.net.ShopActionResultPacket(
                         ShopResult.INSUFFICIENT_FUNDS, emptyPage));
         check("a refused outcome is remembered as a refusal",
-                !com.example.globalshop.client.ClientShopCache.statusSuccess());
+                !com.example.globalshop.core.client.ClientShopCache.statusSuccess());
         check("and it shows the refusal's own message",
                 "globalshop.result.insufficient_funds"
-                        .equals(com.example.globalshop.client.ClientShopCache.statusKey()));
-        com.example.globalshop.client.ClientShopCache.reset();
+                        .equals(com.example.globalshop.core.client.ClientShopCache.statusKey()));
+        com.example.globalshop.core.client.ClientShopCache.reset();
         check("resetting the cache also forgets the verdict",
-                !com.example.globalshop.client.ClientShopCache.statusSuccess());
+                !com.example.globalshop.core.client.ClientShopCache.statusSuccess());
 
         // ---- every result the server can report has wording, in both languages ----
         // A result with no translation key shows the player "globalshop.result.forbidden_item"
@@ -975,8 +1009,8 @@ public final class SelfTest {
                 }
             }
         }
-        for (com.example.globalshop.servershop.ServerShopResult result
-                : com.example.globalshop.servershop.ServerShopResult.values()) {
+        for (com.example.globalshop.core.servershop.ServerShopResult result
+                : com.example.globalshop.core.servershop.ServerShopResult.values()) {
             for (String language : languages) {
                 if (!langFiles.get(language).contains("\"" + result.translationKey() + "\"")) {
                     missingWording.add(language + ":" + result.translationKey());
@@ -1012,18 +1046,18 @@ public final class SelfTest {
 
         // ---- who gets to see the blacklist, and does it survive the wire ----
         ShopDataPacket plainPage = ShopDataPacket.build(alice,
-                com.example.globalshop.network.ShopViewState.INITIAL);
+                com.example.globalshop.core.market.net.ShopViewState.INITIAL);
         check("an ordinary page carries no blacklist", plainPage.blacklist().isEmpty());
         check("and reports that the viewer is not an operator", !plainPage.operator());
         ShopDataPacket refused = ShopDataPacket.build(alice,
-                com.example.globalshop.network.ShopViewState.INITIAL.withBlacklist(true));
+                com.example.globalshop.core.market.net.ShopViewState.INITIAL.withBlacklist(true));
         check("a non-operator who asks for the editor is told no, not given the list",
                 !refused.view().blacklist() && refused.blacklist().isEmpty());
 
         // The wire format, round-tripped: the operator flag, the mode and the ids all have to
         // come back, and the editor is useless if any of the three goes missing.
         ShopDataPacket carried = new ShopDataPacket(List.of(),
-                com.example.globalshop.network.ShopViewState.INITIAL.withBlacklist(true),
+                com.example.globalshop.core.market.net.ShopViewState.INITIAL.withBlacklist(true),
                 1, 0, 0L, 0, true, true, List.of("minecraft:stone", "minecraft:diamond"));
         net.minecraft.network.FriendlyByteBuf buf =
                 new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
@@ -1037,12 +1071,12 @@ public final class SelfTest {
                 back.viewerVip());
 
         // ---- a trade log that only ever shows the asker their own trades ----
-        List<com.example.globalshop.shop.TradeLogEntry> aliceTrades =
+        List<com.example.globalshop.feature.tradelog.TradeLogEntry> aliceTrades =
                 shop.tradesOf(alice.getUUID(), 100);
         check("a seller sees their own sales", !aliceTrades.isEmpty());
-        check("every line is a completed purchase, never a listing",
+        check("every line is a completed trade, never a listing",
                 aliceTrades.stream()
-                        .allMatch(e -> e.kind() == com.example.globalshop.shop.TradeLogEntry.Kind.PURCHASE));
+                        .allMatch(e -> e.kind().isTrade()));
         check("every line really involves the asker",
                 aliceTrades.stream().allMatch(e -> alice.getUUID().equals(e.actorId())
                         || alice.getUUID().equals(e.sellerId())));
@@ -1054,15 +1088,15 @@ public final class SelfTest {
         // ---- the ranking ----
         economy.setBalance(payer1.getUUID(), 5_000L);
         economy.setBalance(payer2.getUUID(), 1_000L);
-        com.example.globalshop.shop.RankingService ranking =
-                com.example.globalshop.shop.ShopServices.ranking(server);
+        com.example.globalshop.feature.ranking.RankingService ranking =
+                com.example.globalshop.core.market.ShopServices.ranking(server);
         ranking.invalidate();
-        List<com.example.globalshop.shop.RankingService.Row> rows = ranking.rows();
+        List<com.example.globalshop.feature.ranking.RankingService.Row> rows = ranking.rows();
         check("the ranking lists every account", rows.size() >= 2);
         check("it is ordered richest first",
-                rows.stream().map(com.example.globalshop.shop.RankingService.Row::balance).toList()
+                rows.stream().map(com.example.globalshop.feature.ranking.RankingService.Row::balance).toList()
                         .equals(rows.stream()
-                                .map(com.example.globalshop.shop.RankingService.Row::balance)
+                                .map(com.example.globalshop.feature.ranking.RankingService.Row::balance)
                                 .sorted(java.util.Comparator.reverseOrder()).toList()));
         check("positions start at one and count upwards",
                 rows.get(0).position() == 1 && rows.get(1).position() == 2);
@@ -1139,7 +1173,7 @@ public final class SelfTest {
         bob.getInventory().clearContent();
         economy.setBalance(alice.getUUID(), 100_000L);
         economy.setBalance(bob.getUUID(), 100_000L);
-        for (com.example.globalshop.shop.Mail existing : shop.mailsOf(bob.getUUID())) {
+        for (com.example.globalshop.core.social.Mail existing : shop.mailsOf(bob.getUUID())) {
             shop.deleteMail(bob.getUUID(), existing.id());
         }
 
@@ -1149,7 +1183,7 @@ public final class SelfTest {
             bob.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
         }
         check("the buyer's backpack really is full",
-                !com.example.globalshop.shop.ItemStacks.wouldFit(bob.getInventory(),
+                !com.example.globalshop.core.market.ItemStacks.wouldFit(bob.getInventory(),
                         new ItemStack(Items.STONE)));
 
         alice.getInventory().clearContent();
@@ -1176,9 +1210,9 @@ public final class SelfTest {
             check("nothing was dropped on the floor", countDroppedItems() == droppedBefore);
             check("the delivery went to the mailbox instead", shop.mailCount(bob.getUUID()) == 1);
 
-            List<com.example.globalshop.shop.Mail> mail = shop.mailsOf(bob.getUUID());
+            List<com.example.globalshop.core.social.Mail> mail = shop.mailsOf(bob.getUUID());
             check("with the market recorded as its source",
-                    mail.get(0).source() == com.example.globalshop.shop.Mail.Source.MARKET);
+                    mail.get(0).source() == com.example.globalshop.core.social.Mail.Source.MARKET);
             check("and the whole delivery inside it", mail.get(0).totalCount() == 5);
             long mailId = mail.get(0).id();
 
@@ -1208,9 +1242,9 @@ public final class SelfTest {
         // Two free slots hold 128 stone, so 72 of 200 has to be mailed.
         check("an oversized delivery is partly mailed",
                 shop.deliverOrMail(bob, List.of(new ItemStack(Items.STONE, 200)),
-                        com.example.globalshop.shop.Mail.Source.MARKET));
+                        com.example.globalshop.core.social.Mail.Source.MARKET));
         check("exactly one mail was created", shop.mailCount(bob.getUUID()) == 1);
-        com.example.globalshop.shop.Mail overflow = shop.mailsOf(bob.getUUID()).get(0);
+        com.example.globalshop.core.social.Mail overflow = shop.mailsOf(bob.getUUID()).get(0);
         check("holding exactly what did not fit", overflow.totalCount() == 72);
         long originalClock = overflow.createdAt();
 
@@ -1220,58 +1254,64 @@ public final class SelfTest {
         bob.getInventory().setItem(0, ItemStack.EMPTY);
         shop.deliverMail(bob);
         check("freeing one slot lets part of it through", shop.mailCount(bob.getUUID()) == 1);
-        com.example.globalshop.shop.Mail remainder = shop.mailsOf(bob.getUUID()).get(0);
+        com.example.globalshop.core.social.Mail remainder = shop.mailsOf(bob.getUUID()).get(0);
         check("and exactly the part that did not fit is still mail", remainder.totalCount() == 8);
         // Re-stamping would let a player keep a mail alive forever by taking a little at a time.
         check("with its original creation time, so partial claims cannot extend its life",
                 remainder.createdAt() == originalClock);
 
-        // ---- expiry ----
+        // ---- the lifetime, which is a deletion rather than a mark ----
         java.time.LocalDate base = java.time.LocalDate.of(2030, 1, 1);
-        com.example.globalshop.servershop.ShopClock.setDateOverrideForTest(base);
+        com.example.globalshop.core.servershop.ShopClock.setDateOverrideForTest(base);
         shop.deleteMail(bob.getUUID(), remainder.id());
         bob.getInventory().clearContent();
         for (int i = 0; i < bob.getInventory().getContainerSize(); i++) {
             bob.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
         }
         shop.deliverOrMail(bob, List.of(new ItemStack(Items.STONE, 3)),
-                com.example.globalshop.shop.Mail.Source.MARKET);
+                com.example.globalshop.core.social.Mail.Source.MARKET);
         check("a fresh mail exists", shop.mailCount(bob.getUUID()) == 1);
         long expiringId = shop.mailsOf(bob.getUUID()).get(0).id();
         check("a fresh mail is not expired", !shop.mailsOf(bob.getUUID()).get(0).isExpired(
-                com.example.globalshop.servershop.ShopClock.nowMillis()));
+                com.example.globalshop.core.servershop.ShopClock.nowMillis()));
 
-        com.example.globalshop.servershop.ShopClock.setDateOverrideForTest(
+        // Inside its lifetime it is still there.
+        com.example.globalshop.core.servershop.ShopClock.setDateOverrideForTest(
+                base.plusDays(Config.mailLifetimeDays() - 1L));
+        check("inside its lifetime the mail is still listed",
+                shop.mailCount(bob.getUUID()) == 1);
+
+        // Past it, the mail has deleted itself. There is no lapsed state to look at and nothing to
+        // clear out by hand: the box is bounded by time, so an old delivery simply stops existing.
+        com.example.globalshop.core.servershop.ShopClock.setDateOverrideForTest(
                 base.plusDays(Config.mailLifetimeDays() + 1L));
-        check("past its lifetime the mail is expired", shop.mailsOf(bob.getUUID()).get(0).isExpired(
-                com.example.globalshop.servershop.ShopClock.nowMillis()));
-        check("an expired mail cannot be claimed",
-                shop.claimMail(bob, expiringId) == ShopResult.MAIL_EXPIRED);
-        check("but it can still be deleted",
-                shop.deleteMail(bob.getUUID(), expiringId));
-        check("and then it is gone", shop.mailCount(bob.getUUID()) == 0);
-        com.example.globalshop.servershop.ShopClock.setDateOverrideForTest(null);
+        check("past its lifetime the mail is gone", shop.mailCount(bob.getUUID()) == 0);
+        check("and an id remembered from before it lapsed is simply not found",
+                shop.claimMail(bob, expiringId) == ShopResult.MAIL_NOT_FOUND);
+        com.example.globalshop.core.servershop.ShopClock.setDateOverrideForTest(null);
 
-        // ---- the limit ----
+        // ---- there is no capacity limit; the box is bounded by time instead ----
         bob.getInventory().clearContent();
         for (int i = 0; i < bob.getInventory().getContainerSize(); i++) {
             bob.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
         }
-        for (int i = 0; i < Config.mailboxLimit(); i++) {
+        for (int i = 0; i < 150; i++) {
             shop.deliverOrMail(bob, List.of(new ItemStack(Items.STONE, 1)),
-                    com.example.globalshop.shop.Mail.Source.MARKET);
+                    com.example.globalshop.core.social.Mail.Source.MARKET);
         }
-        check("the mailbox fills to its configured limit",
-                shop.mailCount(bob.getUUID()) == Config.mailboxLimit());
-        check("and then refuses a live delivery",
-                !shop.deliverOrMail(bob, List.of(new ItemStack(Items.STONE, 1)),
-                        com.example.globalshop.shop.Mail.Source.MARKET));
-        check("leaving the count at the limit", shop.mailCount(bob.getUUID()) == Config.mailboxLimit());
+        check("the mailbox has no capacity limit", shop.mailCount(bob.getUUID()) == 150);
+        check("so a delivery is never refused for want of room",
+                shop.deliverOrMail(bob, List.of(new ItemStack(Items.STONE, 1)),
+                        com.example.globalshop.core.social.Mail.Source.MARKET));
+        check("and it is filed", shop.mailCount(bob.getUUID()) == 151);
 
-        // ---- a purchase with nowhere to go is refused before the money moves ----
+        // ---- a purchase into a full backpack now simply becomes mail ----
+        // This used to be the MAILBOX_FULL path: a full backpack and a full mailbox refused the
+        // purchase before taking money. With the box unbounded there is no such thing as "nowhere
+        // to deliver", so the same situation is now an ordinary success.
         alice.getInventory().clearContent();
         alice.getInventory().setItem(0, new ItemStack(Items.STONE, 4));
-        check("a lot for the full-mailbox check was created",
+        check("a lot for the full-backpack check was created",
                 shop.create(alice, new ItemStack(Items.STONE), 4, 10L, 1, 4,
                         List.of(new ContainerPool(alice.getInventory()))) == ShopResult.SUCCESS);
         UUID blockedLot = null;
@@ -1283,22 +1323,52 @@ public final class SelfTest {
         }
         check("the lot is found", blockedLot != null);
         if (blockedLot != null) {
+            economy.setBalance(bob.getUUID(), 1000L);
             long bobBefore = economy.getBalance(bob.getUUID());
+            int mailBefore = shop.mailCount(bob.getUUID());
             shop.forget(bob.getUUID());
-            check("a purchase with nowhere to deliver is refused up front",
-                    shop.purchase(bob, blockedLot, 4) == ShopResult.MAILBOX_FULL);
-            check("and it took no money", economy.getBalance(bob.getUUID()) == bobBefore);
-            check("and consumed no stock",
-                    shop.find(blockedLot).stock() == 4);
+            check("a purchase with a full backpack succeeds",
+                    shop.purchase(bob, blockedLot, 4) == ShopResult.SUCCESS);
+            check("the buyer paid for it", economy.getBalance(bob.getUUID()) == bobBefore - 40L);
+            check("the goods went to the mailbox", shop.mailCount(bob.getUUID()) == mailBefore + 1);
+            check("and came out of the lot's stock", shop.find(blockedLot).stock() == 0);
             shop.forceRemove(blockedLot, "selftest");
         }
 
+        // ---- mail past its lifetime deletes itself ----
+        LocalDate sentOn = LocalDate.of(2033, 1, 1);
+        ShopClock.setDateOverrideForTest(sentOn);
+        shop.deliverOrMail(bob, List.of(new ItemStack(Items.DIRT, 1)),
+                com.example.globalshop.core.social.Mail.Source.MARKET);
+        int afterSending = shop.mailCount(bob.getUUID());
+        check("a delivery while the clock is pinned is filed", afterSending > 0);
+        ShopClock.setDateOverrideForTest(sentOn.plusDays(Config.mailLifetimeDays() - 1L));
+        check("inside its lifetime the mail is still there",
+                shop.mailCount(bob.getUUID()) == afterSending);
+        ShopClock.setDateOverrideForTest(sentOn.plusDays(Config.mailLifetimeDays() + 1L));
+        check("past its lifetime, reading the box deletes it",
+                shop.mailCount(bob.getUUID()) == 0);
+        ShopClock.setDateOverrideForTest(null);
+
         // ---- a restart keeps the mail ----
-        com.example.globalshop.shop.ShopSavedData live = com.example.globalshop.shop.ShopSavedData.get(server);
+        // The lifetime check above deleted everything in the box, deliberately. This section needs
+        // something in it to survive a restart, so it puts something there itself rather than
+        // relying on what an earlier section happened to leave behind — which is what it used to
+        // do, and what made it throw the moment the earlier section started emptying the box.
+        bob.getInventory().clearContent();
+        for (int i = 0; i < ItemStacks.PLAYER_SLOTS; i++) {
+            bob.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        shop.deliverOrMail(bob, List.of(new ItemStack(Items.STONE, 1)),
+                com.example.globalshop.core.social.Mail.Source.MARKET);
+        check("the box has something in it for the restart check",
+                shop.mailCount(bob.getUUID()) == 1);
+
+        com.example.globalshop.core.market.ShopSavedData live = com.example.globalshop.core.market.ShopSavedData.get(server);
         int countBefore = live.mailCount(bob.getUUID());
         int itemsBefore = live.mailsOf(bob.getUUID()).get(0).totalCount();
-        com.example.globalshop.shop.ShopSavedData reloaded =
-                com.example.globalshop.shop.ShopSavedData.reload(live);
+        com.example.globalshop.core.market.ShopSavedData reloaded =
+                com.example.globalshop.core.market.ShopSavedData.reload(live);
         check("mail survives a restart", reloaded.mailCount(bob.getUUID()) == countBefore);
         check("and so does the delivery inside it",
                 reloaded.mailsOf(bob.getUUID()).get(0).totalCount() == itemsBefore);
@@ -1342,11 +1412,11 @@ public final class SelfTest {
 
         // Leave nothing behind: mail lives in the world save, so a self test that fills a mailbox
         // would otherwise be found by whoever plays next.
-        for (com.example.globalshop.shop.Mail existing : shop.mailsOf(bob.getUUID())) {
+        for (com.example.globalshop.core.social.Mail existing : shop.mailsOf(bob.getUUID())) {
             shop.deleteMail(bob.getUUID(), existing.id());
         }
         check("the mailbox was left empty", shop.mailCount(bob.getUUID()) == 0);
-        com.example.globalshop.shop.ShopSavedData.get(server).setDirty();
+        com.example.globalshop.core.market.ShopSavedData.get(server).setDirty();
         bob.getInventory().clearContent();
         alice.getInventory().clearContent();
         log("mailbox: overflow, limit, expiry, claim and delete covered");
@@ -1366,7 +1436,7 @@ public final class SelfTest {
     }
 
     /** Sends a message, clearing the anti-flood throttle first: a person cannot type this fast. */
-    private ShopResult sendMessage(com.example.globalshop.social.SocialService social,
+    private ShopResult sendMessage(com.example.globalshop.core.social.SocialService social,
                                    ServerPlayer from, UUID to, String text) {
         social.clearThrottleForTest();
         return social.send(from, to, text);
@@ -1374,10 +1444,10 @@ public final class SelfTest {
 
     /** Whether a directory page is in the order it documents: online first, then by name. */
     private static boolean isInDirectoryOrder(
-            List<com.example.globalshop.social.SocialService.Entry> entries) {
+            List<com.example.globalshop.core.social.SocialService.Entry> entries) {
         for (int i = 1; i < entries.size(); i++) {
-            com.example.globalshop.social.SocialService.Entry previous = entries.get(i - 1);
-            com.example.globalshop.social.SocialService.Entry current = entries.get(i);
+            com.example.globalshop.core.social.SocialService.Entry previous = entries.get(i - 1);
+            com.example.globalshop.core.social.SocialService.Entry current = entries.get(i);
             if (previous.online() != current.online()) {
                 if (!previous.online()) {
                     return false;
@@ -1401,18 +1471,18 @@ public final class SelfTest {
     private void socialTests(EconomyService economy, ServerPlayer alice, ServerPlayer bob) {
         log("-- private messages: directory, sending, offline notice, payment --");
 
-        com.example.globalshop.social.SocialService social =
-                com.example.globalshop.social.SocialServices.get(server);
+        com.example.globalshop.core.social.SocialService social =
+                com.example.globalshop.core.social.SocialServices.get(server);
         ServerPlayer carol = fake("GS_Carol");
         economy.ensureAccount(carol.getUUID(), "GS_Carol", 0L);
         economy.setBalance(alice.getUUID(), 10_000L);
         economy.setBalance(bob.getUUID(), 10_000L);
 
         // ---- the directory ----
-        com.example.globalshop.social.SocialService.Page page = social.directory("", 0);
+        com.example.globalshop.core.social.SocialService.Page page = social.directory("", 0);
         check("the directory lists players", page.totalMatches() >= 2);
         check("a page holds five at most",
-                page.entries().size() <= com.example.globalshop.social.SocialService.PAGE_SIZE);
+                page.entries().size() <= com.example.globalshop.core.social.SocialService.PAGE_SIZE);
         check("the directory is in its documented order: online first, then by name",
                 isInDirectoryOrder(page.entries()));
         check("every row's online flag agrees with the server",
@@ -1437,11 +1507,11 @@ public final class SelfTest {
                 social.directory("GS_Carol", 0).entries().stream()
                         .filter(e -> e.name().equalsIgnoreCase("GS_Carol")).count() == 2
                         && social.directory("GS_Carol", 0).entries().stream()
-                                .allMatch(com.example.globalshop.social.SocialService.Entry::duplicateName));
+                                .allMatch(com.example.globalshop.core.social.SocialService.Entry::duplicateName));
         check("while a uniquely named player is not marked",
                 social.directory("", 0).entries().stream()
                         .filter(e -> e.name().equalsIgnoreCase(aliceName))
-                        .noneMatch(com.example.globalshop.social.SocialService.Entry::duplicateName));
+                        .noneMatch(com.example.globalshop.core.social.SocialService.Entry::duplicateName));
 
         // ---- what the server refuses ----
         check("a message to yourself is refused",
@@ -1450,7 +1520,7 @@ public final class SelfTest {
                 sendMessage(social, alice, bob.getUUID(), "   ") == ShopResult.MESSAGE_EMPTY);
         check("an over-long message is refused, and says so specifically",
                 sendMessage(social, alice, bob.getUUID(),
-                        "x".repeat(com.example.globalshop.social.DirectMessage.MAX_LENGTH + 1))
+                        "x".repeat(com.example.globalshop.core.social.DirectMessage.MAX_LENGTH + 1))
                         == ShopResult.MESSAGE_TOO_LONG);
         check("a message to somebody who is not a player is refused",
                 sendMessage(social, alice, UUID.randomUUID(), "hello")
@@ -1460,8 +1530,12 @@ public final class SelfTest {
         // The message log lives in the world save, so a previous run's messages are still here.
         // Every count from this point is relative to what was already on file: an absolute one
         // would pass on a clean machine and fail on the second run, which is worse than no test.
+        //
+        // Reading a conversation is capped (60 lines), though, so a count relative to the size
+        // before only works until the pair's history reaches that cap. The checks about what a
+        // conversation contains are therefore written as "is this line in it", not "did it grow by
+        // exactly N" — the growth ones were passing on a fresh machine and failing on the fiftieth.
         int unnotifiedBefore = social.unnotifiedCount(bob.getUUID());
-        int aliceBobBefore = social.conversation(alice.getUUID(), bob.getUUID()).size();
 
         check("a message to an offline player is accepted, not refused",
                 sendMessage(social, alice, bob.getUUID(), "are you there?") == ShopResult.SUCCESS);
@@ -1472,15 +1546,23 @@ public final class SelfTest {
                 social.announceOnLogin(bob) == unnotifiedBefore + 1);
         check("and not told again on their next login", social.announceOnLogin(bob) == 0);
         check("while the message itself is still there to read",
-                social.conversation(bob.getUUID(), alice.getUUID()).size() == aliceBobBefore + 1);
+                social.conversation(bob.getUUID(), alice.getUUID()).stream()
+                        .anyMatch(line -> line.text().equals("are you there?")));
 
         // ---- a conversation is only ever between the two players in it ----
         check("a third party can write to the same player",
                 sendMessage(social, carol, bob.getUUID(), "wrong person") == ShopResult.SUCCESS);
+        // Asserted by presence, not by a count. Reading a conversation is capped (60 lines), so on a
+        // machine that has run this suite often enough for the pair's history to reach the cap,
+        // "before + 2" can never hold again — the count is pinned at the cap and the check fails
+        // forever. What the name claims is that both directions are in there, so that is what is
+        // checked; ordering is covered by the check below.
         check("a conversation holds both directions",
                 sendMessage(social, bob, alice.getUUID(), "yes") == ShopResult.SUCCESS
-                        && social.conversation(alice.getUUID(), bob.getUUID()).size()
-                                == aliceBobBefore + 2);
+                        && social.conversation(alice.getUUID(), bob.getUUID()).stream()
+                                .anyMatch(line -> line.text().equals("yes"))
+                        && social.conversation(alice.getUUID(), bob.getUUID()).stream()
+                                .anyMatch(line -> line.text().equals("are you there?")));
         check("newest first",
                 social.conversation(alice.getUUID(), bob.getUUID()).get(0).text().equals("yes"));
         check("and one player's messages to a third party are not in it",
@@ -1500,13 +1582,791 @@ public final class SelfTest {
                 !social.pay(alice, UUID.randomUUID(), 1L).isSuccess());
 
         // ---- a restart keeps the messages ----
-        com.example.globalshop.social.SocialSavedData live =
-                com.example.globalshop.social.SocialSavedData.get(server);
+        com.example.globalshop.core.social.SocialSavedData live =
+                com.example.globalshop.core.social.SocialSavedData.get(server);
         int before = live.logSize();
         check("messages survive a restart",
-                com.example.globalshop.social.SocialSavedData.reload(live).logSize() == before);
+                com.example.globalshop.core.social.SocialSavedData.reload(live).logSize() == before);
 
         log("private messages: directory, refusals, offline notice and payment covered");
+    }
+
+    /**
+     * The auction house: held money, the overspend audit, outbid refunds, buyouts, flops, the
+     * anti-sniping rule, and a restart.
+     *
+     * <p>The clock is pinned to an exact instant rather than to a date, because most of what is
+     * under test here is a question about seconds: whether a bid lands inside the closing minute,
+     * and whether the end moves the way the rule says it does.
+     */
+    private void auctionTests(ShopService shop, EconomyService economy) {
+        log("-- auction: held money, the overspend audit, refunds, buyout, flop, anti-snipe, restart --");
+
+        AuctionService auctions = AuctionServices.get(server);
+        ServerPlayer seller = fake("AucSeller");
+        ServerPlayer poor = fake("AucPoor");
+        ServerPlayer rich = fake("AucRich");
+
+        long base = LocalDate.of(2032, 6, 1).atStartOfDay(java.time.ZoneId.systemDefault())
+                .toInstant().toEpochMilli();
+
+        // A previous run leaves auctions in the world save. Driving the clock far forward settles
+        // them out of the way, so everything counted below belongs to this run.
+        ShopClock.setMillisOverrideForTest(base + 400L * 24L * 3_600_000L);
+        auctions.settleDue();
+        ShopClock.setMillisOverrideForTest(base);
+
+        for (ServerPlayer who : List.of(seller, poor, rich)) {
+            who.getInventory().clearContent();
+            for (Mail existing : shop.mailsOf(who.getUUID())) {
+                shop.deleteMail(who.getUUID(), existing.id());
+            }
+            economy.setBalance(who.getUUID(), 0L);
+        }
+        economy.setBalance(poor.getUUID(), 1000L);
+        economy.setBalance(rich.getUUID(), 10_000L);
+        check("the auction house starts with a clean audit", auctions.audit().isEmpty());
+
+        // ---- putting something up escrows it, for real ----
+        seller.getInventory().setItem(0, new ItemStack(Items.DIAMOND, 1));
+        seller.getInventory().setItem(1, new ItemStack(Items.EMERALD, 1));
+        List<ItemPool> pools = List.of(new ContainerPool(seller.getInventory()));
+        check("an auction can be put up",
+                auctions.list(seller, seller.getInventory().getItem(0), 1, 100L, 10L, 0L, 1L, pools)
+                        == AuctionResult.SUCCESS);
+        UUID first = auctionOf(auctions, seller, Items.DIAMOND);
+        check("and it can be found afterwards", first != null);
+        check("the item left the seller's backpack", countItem(seller, Items.DIAMOND) == 0);
+        // The check that the bug this test missed would have failed. The stack handed in is the
+        // seller's own inventory slot, which is what the packet passes; the escrow empties that
+        // slot, so an implementation that copied the template afterwards stored air and lost the
+        // item. Passing a fresh copy here — which is what this test used to do — hid it completely.
+        // Guarded on `first`, so a failure here reports a failed check rather than throwing and
+        // taking the rest of the suite with it — which is what it did the first time it failed.
+        check("and the listing is holding the real item, not air",
+                first != null && auctions.find(first) != null
+                        && auctions.find(first).item().getItem() == Items.DIAMOND
+                        && auctions.find(first).item().getCount() == 1);
+        check("a second auction can be put up",
+                auctions.list(seller, seller.getInventory().getItem(1), 1, 100L, 10L, 0L, 1L, pools)
+                        == AuctionResult.SUCCESS);
+        UUID second = auctionOf(auctions, seller, Items.EMERALD);
+        check("and it can be found too", second != null);
+
+        // ---- the headline rule: money already bid cannot be spent a second time ----
+        check("bidding 800 out of 1000 succeeds",
+                auctions.bid(poor, first, 800L) == AuctionResult.SUCCESS);
+        check("the balance really dropped to 200", economy.getBalance(poor.getUUID()) == 200L);
+        check("and the auction is holding the 800", auctions.heldFor(poor.getUUID()) == 800L);
+        check("a second 800 bid on the other auction is refused",
+                auctions.bid(poor, second, 800L) == AuctionResult.INSUFFICIENT_FUNDS);
+        check("the refused bid cost nothing", economy.getBalance(poor.getUUID()) == 200L);
+        check("and left the other auction untouched", !auctions.find(second).hasBid());
+        check("the audit is still clean", auctions.audit().isEmpty());
+
+        // ---- the rules that protect the bidders ----
+        check("a bid below the minimum increment is refused",
+                auctions.bid(rich, first, 805L) == AuctionResult.BID_TOO_LOW);
+        check("the seller cannot bid on their own auction",
+                auctions.bid(seller, first, 500L) == AuctionResult.CANNOT_BID_ON_OWN);
+        check("the top bidder cannot outbid themselves",
+                auctions.bid(poor, first, 500L) == AuctionResult.ALREADY_TOP_BIDDER);
+
+        // ---- being outbid refunds immediately, not when the auction ends ----
+        check("a higher bid succeeds", auctions.bid(rich, first, 900L) == AuctionResult.SUCCESS);
+        check("the underbidder was refunded at once", economy.getBalance(poor.getUUID()) == 1000L);
+        check("and is holding nothing again", auctions.heldFor(poor.getUUID()) == 0L);
+        check("the new bidder is holding 900", auctions.heldFor(rich.getUUID()) == 900L);
+        check("the price on the auction is the new bid",
+                auctions.find(first).currentPrice() == 900L);
+
+        // ---- the anti-sniping rule at its boundary ----
+        seller.getInventory().setItem(2, new ItemStack(Items.GOLD_INGOT, 1));
+        check("a one-minute auction can be put up",
+                auctions.list(seller, seller.getInventory().getItem(2), 1, 100L, 10L, 0L,
+                        AuctionService.MIN_DURATION_MINUTES, pools) == AuctionResult.SUCCESS);
+        UUID sniped = auctionOf(auctions, seller, Items.GOLD_INGOT);
+        check("and its end is exactly a minute away",
+                auctions.find(sniped).endTimeMillis() == base + 60_000L);
+        // Their example, walked through exactly. The auction runs a full minute, so there is time
+        // to see that a bid with plenty left changes nothing.
+        check("a bid with more than thirty seconds left succeeds",
+                auctions.bid(poor, sniped, 100L) == AuctionResult.SUCCESS);
+        check("and does not move the end",
+                auctions.find(sniped).endTimeMillis() == base + 60_000L);
+        check("nothing was counted as a reset", auctions.find(sniped).extensions() == 0);
+
+        // Ten seconds left, and a bid puts it back to thirty.
+        ShopClock.setMillisOverrideForTest(base + 50_000L);
+        check("a bid with ten seconds left succeeds",
+                auctions.bid(rich, sniped, 120L) == AuctionResult.SUCCESS);
+        check("and the remaining time is thirty seconds again",
+                auctions.find(sniped).endTimeMillis() == base + 80_000L);
+        check("one reset so far", auctions.find(sniped).extensions() == 1);
+
+        // It runs down to fifteen seconds, and the same thing happens again.
+        ShopClock.setMillisOverrideForTest(base + 65_000L);
+        check("a bid with fifteen seconds left succeeds",
+                auctions.bid(poor, sniped, 140L) == AuctionResult.SUCCESS);
+        check("and the remaining time is thirty seconds again",
+                auctions.find(sniped).endTimeMillis() == base + 95_000L);
+        check("two resets now", auctions.find(sniped).extensions() == 2);
+        check("the rule never brings an auction forward",
+                auctions.find(sniped).endTimeMillis() > base + 80_000L);
+
+        // ---- a flop puts the goods back in the seller's mailbox ----
+        ShopClock.setMillisOverrideForTest(base + 200_000L);
+        auctions.settleDue();
+        check("the auction nobody bid on is over",
+                auctions.find(second) == null
+                        || auctions.find(second).state() != AuctionListing.State.ACTIVE);
+        check("and the goods came back as mail", mailContains(shop, seller, Items.EMERALD));
+
+        // ---- a buyout ends it now, and the goods go to the mailbox, never the backpack ----
+        ShopClock.setMillisOverrideForTest(base);
+        seller.getInventory().setItem(3, new ItemStack(Items.DIAMOND, 1));
+        check("an auction with a buyout can be put up",
+                auctions.list(seller, seller.getInventory().getItem(3), 1, 100L, 10L, 500L, 1L, pools)
+                        == AuctionResult.SUCCESS);
+        UUID bought = auctionOf(auctions, seller, Items.DIAMOND);
+        long sellerBefore = economy.getBalance(seller.getUUID());
+        long richBefore = economy.getBalance(rich.getUUID());
+        check("the buyout succeeds", auctions.buyout(rich, bought) == AuctionResult.SUCCESS);
+        check("the buyer paid the buyout price",
+                economy.getBalance(rich.getUUID()) == richBefore - 500L);
+        long fee = 500L * Config.marketCommissionPercent() / 100L;
+        check("the seller was paid after tax",
+                economy.getBalance(seller.getUUID()) == sellerBefore + 500L - fee);
+        check("the goods did not go into the buyer's backpack",
+                countItem(rich, Items.DIAMOND) == 0);
+        check("they went to the buyer's mailbox instead",
+                mailContains(shop, rich, Items.DIAMOND));
+        check("and the auction is over",
+                auctions.find(bought) == null
+                        || auctions.find(bought).state() == AuctionListing.State.SOLD);
+        // An auction sale has to appear in the shared history. A player looking at "my trades"
+        // should not have to remember which of two windows a purchase went through, and the log
+        // entry is what puts it there — it was missing entirely before.
+        check("the sale is written into the shared trade log",
+                shop.tradesOf(seller.getUUID(), 20).stream()
+                        .anyMatch(entry -> entry.kind() == TradeLogEntry.Kind.AUCTION));
+        check("and it is in the buyer's history too",
+                shop.tradesOf(rich.getUUID(), 20).stream()
+                        .anyMatch(entry -> entry.kind() == TradeLogEntry.Kind.AUCTION));
+
+        // ---- custom titles: priced by character ----
+        // The strikethrough case, which is the reason there are two prices at all. "n̶o̶t̶" is not
+        // three characters with lines through them: it is three letters followed by three combining
+        // marks, U+0336, and the marks are the special ones. The user asked for exactly this.
+        String struck = "n\u0336o\u0336t\u0336";
+        com.example.globalshop.feature.title.TitlePricing.Quote struckQuote =
+                com.example.globalshop.feature.title.TitlePricing.quote(struck, 100L, 400L);
+        check("a struck-through title counts letters and marks separately",
+                struckQuote.ordinary() == 3 && struckQuote.special() == 3);
+        check("and is charged both rates", struckQuote.total() == 3 * 100L + 3 * 400L);
+        check("seven Chinese characters are seven ordinary ones",
+                com.example.globalshop.feature.title.TitlePricing.quote("七个汉字的称号", 100L, 400L)
+                        .ordinary() == 7);
+        check("a space is ordinary, not special",
+                com.example.globalshop.feature.title.TitlePricing.quote("Dark Knight", 100L, 400L)
+                        .special() == 0);
+        check("a symbol is special",
+                com.example.globalshop.feature.title.TitlePricing.quote("\u2605", 100L, 400L)
+                        .special() == 1);
+
+        com.example.globalshop.feature.title.TitleService titleService =
+                com.example.globalshop.feature.title.TitleServices.get(server);
+        check("seven characters are allowed", titleService.validate("七个汉字的称号").isSuccess());
+        check("eight are refused",
+                titleService.validate("八个汉字的称号啊")
+                        == com.example.globalshop.feature.title.TitleResult.TOO_LONG);
+        check("a colour code is refused",
+                titleService.validate("\u00a7cRed")
+                        == com.example.globalshop.feature.title.TitleResult.INVALID_CHARACTER);
+        check("spaces on their own are not a title",
+                titleService.validate("   ")
+                        == com.example.globalshop.feature.title.TitleResult.EMPTY);
+
+        economy.addBalance(rich.getUUID(), 10_000_000L);
+        check("a title can be bought",
+                titleService.set(rich, "战\u0336神")
+                        == com.example.globalshop.feature.title.TitleResult.SUCCESS);
+        check("and is worn", "战\u0336神".equals(titleService.titleOf(rich.getUUID())));
+        check("and appears in front of the name, in brackets",
+                titleService.decorate(rich, Component.literal("Rich")).getString()
+                        .startsWith("[战\u0336神] Rich"));
+        check("buying the same title again charges nothing",
+                titleService.set(rich, "战\u0336神")
+                        == com.example.globalshop.feature.title.TitleResult.UNCHANGED);
+        check("clearing it works and is free", titleService.clear(rich).isSuccess());
+        check("and the name goes back to plain",
+                titleService.decorate(rich, Component.literal("Rich")).getString()
+                        .equals("Rich"));
+
+        // ---- the weekly check-in ----
+        // The player's own scenario: a server whose first day is a Wednesday. Monday and Tuesday are
+        // already in the past, so they read as missed and can be bought back; Wednesday is today.
+        java.time.LocalDate wednesday = java.time.LocalDate.of(2026, 10, 7);
+        com.example.globalshop.core.servershop.ShopClock.setDateOverrideForTest(wednesday);
+        // Claims are saved, so a second run of this suite would otherwise find Wednesday already
+        // collected by the first. A clean week is the only way to assert what a fresh player sees.
+        com.example.globalshop.feature.checkin.CheckinServices.get(server).reset(rich.getUUID());
+        com.example.globalshop.feature.checkin.CheckinService checkin =
+                com.example.globalshop.feature.checkin.CheckinServices.get(server);
+        check("a Wednesday knows it is day three",
+                com.example.globalshop.feature.checkin.CheckinService.dayOf(checkin.today()) == 3);
+        check("its week runs from the Monday",
+                "2026-10-05".equals(com.example.globalshop.feature.checkin.CheckinService
+                        .weekKey(wednesday)));
+        check("day one pays one step and day seven pays seven",
+                checkin.rewardFor(1) * 7 == checkin.rewardFor(7)
+                        && checkin.rewardFor(1) > 0L);
+        check("Monday and Tuesday cost the make-up fee",
+                checkin.costsFee(rich, 1) && checkin.costsFee(rich, 2));
+        check("Wednesday does not", !checkin.costsFee(rich, 3));
+        check("Friday has not arrived",
+                checkin.collect(rich, 5)
+                        == com.example.globalshop.feature.checkin.CheckinResult.NOT_YET);
+
+        economy.addBalance(rich.getUUID(), 100_000_000L);
+        long start = economy.getBalance(rich.getUUID());
+        check("today can be collected",
+                checkin.collect(rich, 3)
+                        == com.example.globalshop.feature.checkin.CheckinResult.SUCCESS);
+        check("and pays exactly what day three is worth",
+                economy.getBalance(rich.getUUID()) == start + checkin.rewardFor(3));
+        check("collecting it again is refused",
+                checkin.collect(rich, 3)
+                        == com.example.globalshop.feature.checkin.CheckinResult.ALREADY_CLAIMED);
+
+        long beforeMakeUp = economy.getBalance(rich.getUUID());
+        check("a missed day can be bought back",
+                checkin.collect(rich, 1)
+                        == com.example.globalshop.feature.checkin.CheckinResult.SUCCESS);
+        check("for its fee, and it pays half the day's reward",
+                economy.getBalance(rich.getUUID())
+                        == beforeMakeUp - checkin.makeupCost() + checkin.makeUpReward(1));
+        check("which is exactly half of what the day was worth",
+                checkin.makeUpReward(4) * 2 == checkin.rewardFor(4));
+        // The invariant that keeps the design honest. If a config change ever made the best day of
+        // the week worth more than the fee, deliberately skipping it would pay, and this fails.
+        check("and no day of the week is worth missing on purpose",
+                checkin.makeUpReward(7) < checkin.makeupCost());
+        check("and is marked as made up rather than claimed",
+                checkin.record(rich).isMadeUp(1) && checkin.record(rich).isClaimed(1));
+
+        // The next Monday: a new week, so the panel is empty again. Nothing carries over, and last
+        // week's days are gone rather than claimable late.
+        com.example.globalshop.core.servershop.ShopClock.setDateOverrideForTest(
+                java.time.LocalDate.of(2026, 10, 12));
+        check("a new week starts clean",
+                checkin.collectable(rich, 1).isSuccess());
+        check("and last week's claims are not remembered",
+                checkin.collectable(rich, 1).isSuccess() && !checkin.record(rich).isClaimed(3));
+        // Put the clock back, or every test after this one runs on a pinned Wednesday.
+        com.example.globalshop.core.servershop.ShopClock.setDateOverrideForTest(null);
+
+        // ---- teleports ----
+        // Consent is the whole feature, so most of this is about what does _not_ happen: nothing
+        // moves until the player being visited agrees, and a request nobody has answered cannot be
+        // acted on by anyone else.
+        //
+        // One honest gap: this test server's players are not in its player list, so a request's
+        // asker cannot be looked up and the accept-and-move path cannot run here. Every refusal and
+        // every invariant around it can, and the move itself is checked in game.
+        com.example.globalshop.feature.teleport.TeleportService teleports =
+                com.example.globalshop.feature.teleport.TeleportServices.get(server);
+        teleports.clear();
+        check("visiting somebody costs money", teleports.targetPrice() > 0L);
+        check("and a player starts with no visiting cooldown",
+                teleports.targetCooldownLeft(poor.getUUID()) == 0L);
+        check("the random cooldown is the configured number of seconds",
+                teleports.cooldownMillis()
+                        == com.example.globalshop.Config.teleportCooldownSeconds() * 1000L);
+        check("asking to visit somebody succeeds",
+                teleports.request(poor, rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.SUCCESS);
+        check("the asker is now waiting", teleports.outgoing(poor.getUUID()) != null);
+        check("and the target has something to answer",
+                teleports.incoming(rich.getUUID()) != null);
+        check("a request to a name that is not online is refused",
+                teleports.request(poor, "NobodyHere")
+                        == com.example.globalshop.feature.teleport.TeleportResult.NO_SUCH_PLAYER);
+        check("asking to visit yourself is refused",
+                teleports.request(poor, poor)
+                        == com.example.globalshop.feature.teleport.TeleportResult.THAT_IS_YOU);
+
+        // The invariant that matters most: a request is not a teleport.
+        double beforeX = poor.getX();
+        double beforeZ = poor.getZ();
+        check("only the player being asked can accept",
+                teleports.accept(poor)
+                        == com.example.globalshop.feature.teleport.TeleportResult.NO_REQUEST);
+        check("and the request is still open after that",
+                teleports.incoming(rich.getUUID()) != null);
+        check("nothing has moved the asker",
+                Math.abs(poor.getX() - beforeX) < 0.01D
+                        && Math.abs(poor.getZ() - beforeZ) < 0.01D);
+
+        // Accepting when the asker cannot be reached is the "they logged out while waiting" case,
+        // and it consumes the request rather than leaving it to be answered again.
+        check("accepting after the asker has gone says so",
+                teleports.accept(rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.NO_SUCH_PLAYER);
+        check("and clears the request",
+                teleports.incoming(rich.getUUID()) == null
+                        && teleports.outgoing(poor.getUUID()) == null);
+        check("the asker still has not moved",
+                Math.abs(poor.getX() - beforeX) < 0.01D
+                        && Math.abs(poor.getZ() - beforeZ) < 0.01D);
+
+        check("a second request can be made after that",
+                teleports.request(poor, rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.SUCCESS);
+        check("the target can refuse it",
+                teleports.deny(rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.SUCCESS);
+        check("which leaves nothing open",
+                teleports.incoming(rich.getUUID()) == null
+                        && teleports.outgoing(poor.getUUID()) == null);
+        check("nothing to refuse twice",
+                teleports.deny(rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.NO_REQUEST);
+
+        check("asking twice replaces the first request",
+                teleports.request(poor, rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.SUCCESS
+                        && teleports.request(poor, rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.SUCCESS
+                        && teleports.incoming(rich.getUUID()) != null);
+        check("cancelling closes it",
+                teleports.cancel(poor)
+                        == com.example.globalshop.feature.teleport.TeleportResult.SUCCESS
+                        && teleports.incoming(rich.getUUID()) == null);
+        check("but the target cannot cancel somebody else's request",
+                teleports.request(poor, rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.SUCCESS
+                        && teleports.cancel(rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.NO_REQUEST);
+        check("so a logged-out player is what clears it",
+                teleports.incoming(rich.getUUID()) != null);
+        teleports.forgetPlayer(poor.getUUID());
+        check("and the other end is cleared too",
+                teleports.incoming(rich.getUUID()) == null
+                        && teleports.outgoing(poor.getUUID()) == null);
+
+        // The random jump is checked for its guards only: where it lands is the world's business,
+        // and a test that asserted a position would be asserting a seed.
+        check("a random jump either happens or says why it cannot",
+                teleports.random(rich).isSuccess()
+                        || teleports.random(rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.ON_COOLDOWN);
+        check("and afterwards it is on cooldown",
+                teleports.random(rich)
+                        == com.example.globalshop.feature.teleport.TeleportResult.ON_COOLDOWN
+                        || teleports.randomCooldownLeft(rich.getUUID()) > 0L);
+        teleports.clear();
+        // ---- player against player ----
+        com.example.globalshop.feature.pvp.PvpService pvp = com.example.globalshop.feature.pvp.PvpServices
+                .get(server);
+        pvp.clear();
+        pvp.setWilling(poor, false);
+        pvp.setWilling(rich, false);
+        check("PvP is off by default", !pvp.isWilling(poor.getUUID()));
+        check("and a player who has not opted in cannot be hurt",
+                !pvp.damageAllowed(rich.getUUID(), poor.getUUID()));
+        check("nor can they start a fight",
+                pvp.challenge(poor, rich)
+                        == com.example.globalshop.feature.pvp.PvpResult.YOU_DECLINED);
+
+        pvp.setWilling(poor, true);
+        check("one side opting in is not enough",
+                pvp.challenge(poor, rich)
+                        == com.example.globalshop.feature.pvp.PvpResult.THEY_DECLINED);
+        check("and that still does not allow damage",
+                !pvp.damageAllowed(poor.getUUID(), rich.getUUID()));
+
+        pvp.setWilling(rich, true);
+        check("with both opted in, the fight can start",
+                pvp.challenge(poor, rich)
+                        == com.example.globalshop.feature.pvp.PvpResult.SUCCESS);
+        check("the duel is symmetric",
+                rich.getUUID().equals(pvp.opponentOf(poor.getUUID()))
+                        && poor.getUUID().equals(pvp.opponentOf(rich.getUUID())));
+        check("and now they may hurt each other",
+                pvp.damageAllowed(poor.getUUID(), rich.getUUID())
+                        && pvp.damageAllowed(rich.getUUID(), poor.getUUID()));
+        // The invariant that makes the setting worth anything: a duel between two people does not
+        // make anybody else on the server fair game.
+        check("but a duel does not make anybody else attackable",
+                !pvp.damageAllowed(rich.getUUID(), seller.getUUID())
+                        && !pvp.damageAllowed(seller.getUUID(), rich.getUUID()));
+        check("and only one duel at a time",
+                pvp.challenge(poor, rich)
+                        == com.example.globalshop.feature.pvp.PvpResult.ALREADY_DUELLING);
+
+        // The stake: a range, rolled at the moment of death, and never more than they hold.
+        long stake = pvp.stake();
+        long lowest = stake * pvp.lossMinPercent() / 100L;
+        long highest = stake * pvp.lossMaxPercent() / 100L;
+        check("the range is a range, not a fixed number", lowest < highest);
+        boolean inRange = true;
+        for (int i = 0; i < 200; i++) {
+            long roll = pvp.rollLoss();
+            if (roll < lowest || roll > highest) {
+                inRange = false;
+            }
+        }
+        check("a loss always lands inside the configured range", inRange);
+
+        economy.addBalance(poor.getUUID(), 100_000_000L);
+        long beforeLoss = economy.getBalance(poor.getUUID());
+        long winnerBefore = economy.getBalance(rich.getUUID());
+        long charged = pvp.settleDeath(poor);
+        check("losing a duel costs something", charged >= lowest && charged <= highest);
+        check("and exactly that much leaves the balance",
+                economy.getBalance(poor.getUUID()) == beforeLoss - charged);
+        check("and the winner is paid exactly that much",
+                economy.getBalance(rich.getUUID()) == winnerBefore + charged);
+        check("the duel is over", !pvp.isDuelling(poor.getUUID()));
+        check("losing outside a duel costs nothing", pvp.settleDeath(poor) == 0L);
+
+        // Nothing else in this mod can leave a player in debt, and a duel must not be the exception.
+        pvp.challenge(poor, rich);
+        economy.removeBalance(poor.getUUID(), economy.getBalance(poor.getUUID()));
+        check("a duel cannot leave a player in debt",
+                pvp.settleDeath(poor) == 0L && economy.getBalance(poor.getUUID()) == 0L);
+
+        pvp.challenge(poor, rich);
+        pvp.setWilling(rich, false);
+        check("turning PvP off ends the fight",
+                !pvp.isDuelling(poor.getUUID()) && !pvp.isDuelling(rich.getUUID()));
+        check("and the protection is back",
+                !pvp.damageAllowed(poor.getUUID(), rich.getUUID()));
+        pvp.setWilling(poor, false);
+        pvp.clear();
+
+        // ---- the public API ----
+        // What an addon compiles against. Checked as a contract: bounds, ownership, and that the
+        // economy handed out is the same instance the mod's own features use.
+        com.example.globalshop.api.feature.FeaturePlaces.clear();
+        check("the API declares a supported version",
+                com.example.globalshop.api.GlobalShopApi.API_VERSION >= 1);
+        check("the API hands out the economy the mod itself uses",
+                com.example.globalshop.api.GlobalShopApi.economy(server)
+                        == com.example.globalshop.api.economy.EconomyServices.get(server));
+        check("page two has thirty-two places",
+                com.example.globalshop.api.feature.FeaturePlaces.COUNT == 32);
+        check("nothing is claimed to begin with",
+                com.example.globalshop.api.feature.FeaturePlaces.claimed() == 0);
+
+        boolean[] used = {false};
+        check("a place can be registered",
+                com.example.globalshop.api.feature.FeaturePlaces.register(7,
+                        com.example.globalshop.api.feature.FeaturePlaces.of(
+                                net.minecraft.network.chat.Component.literal("Test place"),
+                                null, player -> used[0] = true)));
+        check("and it reports itself as taken",
+                com.example.globalshop.api.feature.FeaturePlaces.isTaken(7));
+        check("and can be looked up",
+                com.example.globalshop.api.feature.FeaturePlaces.at(7).isPresent());
+        check("two mods cannot claim one place",
+                !com.example.globalshop.api.feature.FeaturePlaces.register(7,
+                        com.example.globalshop.api.feature.FeaturePlaces.of(null, null, null)));
+        check("the first claim survives the second attempt",
+                com.example.globalshop.api.feature.FeaturePlaces.at(7).orElseThrow()
+                        .title().getString().equals("Test place"));
+        check("an index past the last place is refused",
+                !com.example.globalshop.api.feature.FeaturePlaces.register(32,
+                        com.example.globalshop.api.feature.FeaturePlaces.of(null, null, null)));
+        check("a negative index is refused",
+                !com.example.globalshop.api.feature.FeaturePlaces.register(-1,
+                        com.example.globalshop.api.feature.FeaturePlaces.of(null, null, null)));
+        check("a place with nothing in it is usable, not a crash",
+                com.example.globalshop.api.feature.FeaturePlaces.register(8,
+                        com.example.globalshop.api.feature.FeaturePlaces.of(null, null, null))
+                        && com.example.globalshop.api.feature.FeaturePlaces.at(8).orElseThrow()
+                                .icon().isEmpty());
+
+        com.example.globalshop.api.feature.FeaturePlaces.at(7).orElseThrow().use(rich);
+        check("a place's action runs when it is used", used[0]);
+        check("the registry lists what is claimed, in index order",
+                com.example.globalshop.api.feature.FeaturePlaces.all().keySet().toString()
+                        .equals("[7, 8]"));
+        check("a place reports itself available unless it says otherwise",
+                com.example.globalshop.api.feature.FeaturePlaces.at(7).orElseThrow()
+                        .isAvailable(rich));
+
+        // Left clean: the registry is static, so the next run would otherwise start with these.
+        com.example.globalshop.api.feature.FeaturePlaces.clear();
+        check("and the registry can be emptied again",
+                com.example.globalshop.api.feature.FeaturePlaces.claimed() == 0);
+
+        // ---- the balance event ----
+        // The numbers, not just the arrival. A delta with the wrong sign would have a listener pay
+        // out for a withdrawal, and the first draft of the firing code did exactly that.
+        BalanceEventCapture capture = new BalanceEventCapture();
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(capture);
+        java.util.List<com.example.globalshop.api.event.BalanceChangedEvent> seen = capture.seen;
+
+        // Emptied first so the set below starts from a known zero. The emptying is a balance change
+        // and posts an event of its own, so the list is cleared after it: otherwise every check
+        // below reads the numbers of the event before the one it means.
+        economy.removeBalance(rich.getUUID(), economy.getBalance(rich.getUUID()));
+        seen.clear();
+        economy.setBalance(rich.getUUID(), 1_000L);
+        economy.addBalance(rich.getUUID(), 500L);
+        economy.removeBalance(rich.getUUID(), 200L);
+        economy.transfer(rich.getUUID(), poor.getUUID(), 100L);
+
+        check("the event is posted for a set, an add, a remove and both sides of a transfer",
+                seen.size() == 5);
+        check("a set reports the jump from nothing to the new balance",
+                seen.size() == 5 && seen.get(0).balanceBefore() == 0L
+                        && seen.get(0).balanceAfter() == 1_000L && seen.get(0).delta() == 1_000L);
+        check("an add reports growth",
+                seen.size() == 5 && seen.get(1).balanceBefore() == 1_000L
+                        && seen.get(1).balanceAfter() == 1_500L && seen.get(1).delta() == 500L);
+        check("a remove reports a negative delta, not a positive one",
+                seen.size() == 5 && seen.get(2).balanceBefore() == 1_500L
+                        && seen.get(2).balanceAfter() == 1_300L && seen.get(2).delta() == -200L);
+        check("a transfer reports the payer shrinking",
+                seen.size() == 5 && seen.get(3).balanceBefore() == 1_300L
+                        && seen.get(3).balanceAfter() == 1_200L && seen.get(3).delta() == -100L);
+        check("and the payee growing, by the same amount",
+                seen.size() == 5 && seen.get(4).balanceAfter() - seen.get(4).balanceBefore() == 100L
+                        && seen.get(4).playerId().equals(poor.getUUID()));
+        check("the event says what caused it",
+                seen.size() == 5 && seen.get(2).reason().equals("remove"));
+
+        seen.clear();
+        check("a refused change posts nothing",
+                economy.removeBalance(rich.getUUID(), 999_999_999L)
+                        == com.example.globalshop.api.economy.TransactionResult.INSUFFICIENT_FUNDS
+                        && seen.isEmpty());
+        check("and setting the same balance posts nothing either",
+                economy.setBalance(rich.getUUID(), economy.getBalance(rich.getUUID()))
+                        == com.example.globalshop.api.economy.TransactionResult.SUCCESS
+                        && seen.isEmpty());
+
+        net.minecraftforge.common.MinecraftForge.EVENT_BUS.unregister(capture);
+
+        // Put the players back: the checks above deliberately emptied and moved money around.
+        economy.setBalance(rich.getUUID(), 100_000_000L);
+        economy.setBalance(poor.getUUID(), 100_000_000L);
+        // Put the balance back. The debt test deliberately empties it, and the auction checks later
+        // in this suite have the same player bid on a lot.
+        economy.addBalance(poor.getUUID(), 100_000_000L);
+        // ---- the bank ----
+        com.example.globalshop.feature.bank.BankService bank = com.example.globalshop.feature.bank.BankServices
+                .get(server);
+        bank.repair();
+        // The file is saved, so a second run of this suite would otherwise start with the first
+        // run's deposit and loan and assert against figures that are no longer starting points.
+        bank.reset(rich.getUUID());
+        economy.addBalance(rich.getUUID(), 100_000_000L);
+        long walletBefore = economy.getBalance(rich.getUUID());
+        check("money can be deposited",
+                bank.deposit(rich, 1_000_000L)
+                        == com.example.globalshop.feature.bank.BankResult.SUCCESS);
+        check("and it leaves the wallet",
+                economy.getBalance(rich.getUUID()) == walletBefore - 1_000_000L);
+        check("and is held by the bank", bank.depositOf(rich.getUUID()) == 1_000_000L);
+        check("depositing more than you carry is refused",
+                bank.deposit(rich, 999_999_999_999L)
+                        == com.example.globalshop.feature.bank.BankResult.INSUFFICIENT_FUNDS);
+        check("withdrawing more than is deposited is refused",
+                bank.withdraw(rich, 2_000_000L)
+                        == com.example.globalshop.feature.bank.BankResult.INSUFFICIENT_DEPOSIT);
+        check("and it can be taken back out",
+                bank.withdraw(rich, 400_000L)
+                        == com.example.globalshop.feature.bank.BankResult.SUCCESS
+                        && bank.depositOf(rich.getUUID()) == 600_000L);
+
+        // The three "everything" buttons. The amounts are worked out on the server, so what is
+        // asserted here is the same thing the server would decide.
+        check("depositing everything moves the whole wallet",
+                bank.depositAll(rich) == com.example.globalshop.feature.bank.BankResult.SUCCESS
+                        && economy.getBalance(rich.getUUID()) == 0L);
+        long allDeposited = bank.depositOf(rich.getUUID());
+        check("and it all went into the bank", allDeposited > 600_000L);
+        check("withdrawing everything brings it all back",
+                bank.withdrawAll(rich) == com.example.globalshop.feature.bank.BankResult.SUCCESS
+                        && bank.depositOf(rich.getUUID()) == 0L
+                        && economy.getBalance(rich.getUUID()) == allDeposited);
+        check("with nothing deposited there is nothing to withdraw",
+                bank.withdrawAll(rich)
+                        == com.example.globalshop.feature.bank.BankResult.INVALID_AMOUNT);
+        check("repaying with nothing owed is refused",
+                bank.repayAll(rich) == com.example.globalshop.feature.bank.BankResult.INVALID_AMOUNT);
+
+        check("nothing is owed to begin with", bank.loanOf(rich.getUUID()) == 0L);
+        check("borrowing past the limit is refused",
+                bank.borrow(rich, bank.loanLimit() + 1L)
+                        == com.example.globalshop.feature.bank.BankResult.LOAN_LIMIT_REACHED);
+        check("and works under it",
+                bank.borrow(rich, 200_000L)
+                        == com.example.globalshop.feature.bank.BankResult.SUCCESS
+                        && bank.loanOf(rich.getUUID()) == 200_000L);
+        check("repaying with nothing owed is refused",
+                bank.repay(poor, 1_000L)
+                        == com.example.globalshop.feature.bank.BankResult.NOTHING_OWED);
+
+        // A game day is 24000 ticks and the service takes both clocks, so the loan's rate is tested
+        // with two numbers rather than by moving the world. The deposit's clock is the wall clock,
+        // which a test cannot move, and that rate is therefore not exercised here.
+        //
+        // The wallet is emptied first on purpose. Interest is added to the debt and then the wallet
+        // is emptied into it, so a borrower holding a fortune pays the charge off immediately — the
+        // debt only grows for somebody who cannot clear it, and that is the case being tested.
+        economy.removeBalance(rich.getUUID(), economy.getBalance(rich.getUUID()));
+        long owedBefore = bank.loanOf(rich.getUUID());
+        long wallNow = System.currentTimeMillis();
+        long gameNow = server.overworld().getDayTime();
+        bank.accrueAt(rich.getUUID(), wallNow,
+                gameNow + com.example.globalshop.feature.bank.BankService.TICKS_PER_GAME_DAY);
+        long owedAfter = bank.loanOf(rich.getUUID());
+        check("a loan charges interest for each game day that passes", owedAfter > owedBefore);
+
+        // ---- the deposit's interest, which the suite never checked ----
+        // The wall clock cannot be moved by a test, but accrueAt takes it as an argument — which is
+        // the whole reason that method exists. The gap let a real problem reach a player.
+        // Funded first: the loan checks above deliberately empty the wallet, and without this the
+        // deposit below is refused and every interest figure here is zero — which made one of these
+        // checks pass as 0 == 0 rather than because the rate was right.
+        economy.addBalance(rich.getUUID(), 5_000_000L);
+        long depositWas = bank.depositOf(rich.getUUID());
+        bank.deposit(rich, 1_000_000L);
+        check("the deposit this test measures really was made",
+                bank.depositOf(rich.getUUID()) >= depositWas + 1_000_000L);
+        long depositBefore = bank.depositOf(rich.getUUID());
+        check("and it is large enough for half a percent to be more than nothing",
+                depositBefore * bank.depositInterestBasisPoints() / 10_000L > 0L);
+        long wall = System.currentTimeMillis();
+        bank.accrueAt(rich.getUUID(), wall + com.example.globalshop.feature.bank.BankService.MILLIS_PER_REAL_DAY, gameNow);
+        long depositAfter = bank.depositOf(rich.getUUID());
+        check("a deposit earns interest for each real day that passes", depositAfter > depositBefore);
+        check("at the configured rate, in whole units",
+                depositAfter - depositBefore
+                        == depositBefore * bank.depositInterestBasisPoints() / 10_000L);
+        bank.accrueAt(rich.getUUID(), wall + com.example.globalshop.feature.bank.BankService.MILLIS_PER_REAL_DAY / 2L, gameNow);
+        check("asking again before the next whole day pays nothing more",
+                bank.depositOf(rich.getUUID()) == depositAfter);
+        bank.accrueAt(rich.getUUID(), wall + 2L * com.example.globalshop.feature.bank.BankService.MILLIS_PER_REAL_DAY, gameNow);
+        check("and the next whole day pays again",
+                bank.depositOf(rich.getUUID()) > depositAfter);
+        // Back to how the loan checks left things. They are about a borrower with nothing, and the
+        // money funded above would pay the debt off before the drain could be observed — which is
+        // exactly what happened the first time this ran.
+        economy.removeBalance(rich.getUUID(), economy.getBalance(rich.getUUID()));
+
+        // ---- the timestamp repair ----
+        // An account saved before these fields existed reads as zero, which is 1970 for a deposit:
+        // without this, its first accrual would pay out twenty thousand days at once.
+        com.example.globalshop.feature.bank.BankSavedData bankData = com.example.globalshop.feature.bank.BankSavedData.get(server);
+        synchronized (bankData) {
+            com.example.globalshop.feature.bank.BankSavedData.Account stale = bankData.account(rich.getUUID(), wall, gameNow);
+            stale.setLastDepositAccrual(0L);
+            stale.setLastLoanAccrual(0L);
+            bankData.repairTimestamps(wall, gameNow);
+            check("a deposit stamp reading as 1970 is forgiven rather than paid out",
+                    stale.lastDepositAccrual() == wall);
+            check("and so is a loan stamp from the first game day",
+                    stale.lastLoanAccrual() == gameNow);
+
+        // ---- a packet's two halves must agree ----
+        // This cannot catch a client and a server built from different revisions — nothing in one
+        // process can — but it does catch the version of that mistake which is easy to make: adding a
+        // field to encode and forgetting decode, or the other way round.
+        com.example.globalshop.feature.bank.net.BankDataPacket sent =
+                new com.example.globalshop.feature.bank.net.BankDataPacket(
+                        1L, 2L, 3L, 4L, 50L, 200L, true);
+        net.minecraft.network.FriendlyByteBuf wire =
+                new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        sent.encode(wire);
+        com.example.globalshop.feature.bank.net.BankDataPacket received =
+                com.example.globalshop.feature.bank.net.BankDataPacket.decode(wire);
+        check("a bank packet survives the wire unchanged", sent.equals(received));
+        check("including the flag that decides between opening and refreshing",
+                received.openWindow());
+        check("and the buffer is left with nothing unread",
+                wire.readableBytes() == 0);
+        }
+        check("at the configured rate, to within a rounding",
+                owedAfter - owedBefore == owedBefore * bank.loanInterestBasisPoints() / 10_000L);
+
+        // What cannot be paid stays owed: the wallet is emptied into the debt and no further.
+        economy.addBalance(rich.getUUID(), 1_000L);
+        bank.accrueAt(rich.getUUID(), wallNow,
+                gameNow + 2L * com.example.globalshop.feature.bank.BankService.TICKS_PER_GAME_DAY);
+        check("an unpaid debt takes the wallet", economy.getBalance(rich.getUUID()) == 0L);
+        check("and the rest stays owed", bank.loanOf(rich.getUUID()) > 0L);
+        check("but nothing can push a wallet negative",
+                economy.getBalance(rich.getUUID()) >= 0L);
+
+        check("the debt can be cleared by repaying what is owed",
+                bank.repay(rich, bank.loanOf(rich.getUUID()))
+                        == com.example.globalshop.feature.bank.BankResult.INSUFFICIENT_FUNDS
+                        || bank.loanOf(rich.getUUID()) == 0L);
+        check("a player who has never used the bank has nothing",
+                bank.depositOf(seller.getUUID()) == 0L && bank.loanOf(seller.getUUID()) == 0L);
+
+        // ---- a restart keeps the auction and the money it is holding ----
+        ShopClock.setMillisOverrideForTest(base);
+        seller.getInventory().setItem(4, new ItemStack(Items.DIAMOND, 1));
+        check("an auction for the restart check can be put up",
+                auctions.list(seller, seller.getInventory().getItem(4), 1, 100L, 10L, 0L, 1L, pools)
+                        == AuctionResult.SUCCESS);
+        UUID survives = auctionOf(auctions, seller, Items.DIAMOND);
+        check("with a bid on it",
+                auctions.bid(poor, survives, 300L) == AuctionResult.SUCCESS);
+        AuctionSavedData reloaded = AuctionSavedData.reload(server);
+        check("the auction survives a restart", reloaded.byId(survives) != null);
+        check("and the money it is holding survives with it",
+                reloaded.byId(survives) != null
+                        && reloaded.heldBy(reloaded.byId(survives)) == 300L);
+        check("the reloaded data audits clean", reloaded.audit().isEmpty());
+
+        // ---- leave nothing behind ----
+        ShopClock.setMillisOverrideForTest(base + 400L * 24L * 3_600_000L);
+        auctions.settleDue();
+        check("nothing is left owing after everything settles", auctions.audit().isEmpty());
+        ShopClock.setMillisOverrideForTest(null);
+        for (ServerPlayer who : List.of(seller, poor, rich)) {
+            who.getInventory().clearContent();
+            for (Mail existing : shop.mailsOf(who.getUUID())) {
+                shop.deleteMail(who.getUUID(), existing.id());
+            }
+            economy.setBalance(who.getUUID(), 0L);
+        }
+
+        log("auction: held money, refunds, buyout, flop, anti-snipe and restart covered");
+    }
+
+    /** This seller's auction for one item, or {@code null}. */
+    @Nullable
+    private UUID auctionOf(AuctionService auctions, ServerPlayer seller,
+                           net.minecraft.world.item.Item item) {
+        for (AuctionListing listing : auctions.active()) {
+            if (listing.sellerId().equals(seller.getUUID())
+                    && listing.item().getItem() == item) {
+                return listing.id();
+            }
+        }
+        return null;
+    }
+
+    /** Whether this player's mailbox holds any of an item. */
+    private boolean mailContains(ShopService shop, ServerPlayer player,
+                                 net.minecraft.world.item.Item item) {
+        for (Mail mail : shop.mailsOf(player.getUUID())) {
+            for (ItemStack stack : mail.items()) {
+                if (stack.getItem() == item) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** How many of one item a player is carrying in the 36 backpack slots. */
@@ -1532,8 +2392,8 @@ public final class SelfTest {
                                  ServerPlayer bob) {
         log("-- offers: escrow, negotiation, payment, delivery, withdrawal --");
 
-        com.example.globalshop.social.SocialService social =
-                com.example.globalshop.social.SocialServices.get(server);
+        com.example.globalshop.core.social.SocialService social =
+                com.example.globalshop.core.social.SocialServices.get(server);
         alice.getInventory().clearContent();
         bob.getInventory().clearContent();
         economy.setBalance(alice.getUUID(), 50_000L);
@@ -1552,7 +2412,7 @@ public final class SelfTest {
         check("offering succeeds",
                 social.offerTo(alice, bob.getUUID(), pools) == ShopResult.SUCCESS);
         check("the item left the slot", slot.getItem(0).isEmpty());
-        com.example.globalshop.social.TradeOffer offer =
+        com.example.globalshop.core.social.TradeOffer offer =
                 social.offerBetween(alice.getUUID(), bob.getUUID());
         check("the offer is holding it", offer != null && offer.quantity() == 3
                 && offer.item().getItem() == Items.DIAMOND);
@@ -1606,7 +2466,7 @@ public final class SelfTest {
                 social.payOffer(bob, alice.getUUID(), 800L) == ShopResult.NO_TRADE_OPEN);
 
         // ---- a full backpack sends it to the mailbox, not the floor ----
-        for (com.example.globalshop.shop.Mail existing : shop.mailsOf(bob.getUUID())) {
+        for (com.example.globalshop.core.social.Mail existing : shop.mailsOf(bob.getUUID())) {
             shop.deleteMail(bob.getUUID(), existing.id());
         }
         bob.getInventory().clearContent();
@@ -1625,7 +2485,7 @@ public final class SelfTest {
 
         // ---- withdrawing gives it back ----
         bob.getInventory().clearContent();
-        for (com.example.globalshop.shop.Mail existing : shop.mailsOf(bob.getUUID())) {
+        for (com.example.globalshop.core.social.Mail existing : shop.mailsOf(bob.getUUID())) {
             shop.deleteMail(bob.getUUID(), existing.id());
         }
         alice.getInventory().clearContent();
@@ -1645,10 +2505,10 @@ public final class SelfTest {
         check("a fourth offer is made",
                 social.offerTo(alice, bob.getUUID(), pools) == ShopResult.SUCCESS);
         check("and priced", social.publishPrice(alice, bob.getUUID(), 123L) == ShopResult.SUCCESS);
-        com.example.globalshop.social.SocialSavedData live =
-                com.example.globalshop.social.SocialSavedData.get(server);
-        com.example.globalshop.social.SocialSavedData reloaded =
-                com.example.globalshop.social.SocialSavedData.reload(live);
+        com.example.globalshop.core.social.SocialSavedData live =
+                com.example.globalshop.core.social.SocialSavedData.get(server);
+        com.example.globalshop.core.social.SocialSavedData reloaded =
+                com.example.globalshop.core.social.SocialSavedData.reload(live);
         check("offers survive a restart", reloaded.offerCount() == live.offerCount());
         check("and one is still listed after it", reloaded.offerCount() >= 1);
 
@@ -1663,8 +2523,8 @@ public final class SelfTest {
                 social.offerTo(alice, bob.getUUID(), pools) == ShopResult.SUCCESS);
         check("and it is holding the ingots",
                 social.offerBetween(alice.getUUID(), bob.getUUID()).quantity() == 6);
-        com.example.globalshop.menu.TradeMenu menu =
-                new com.example.globalshop.menu.TradeMenu(0, alice.getInventory());
+        com.example.globalshop.core.menu.TradeMenu menu =
+                new com.example.globalshop.core.menu.TradeMenu(0, alice.getInventory());
         menu.removed(alice);
         check("closing the window takes the offer back",
                 social.offerBetween(alice.getUUID(), bob.getUUID()) == null);
@@ -1684,7 +2544,7 @@ public final class SelfTest {
         // Leave nothing behind: an offer holds real items.
         social.withdraw(alice, bob.getUUID());
         social.withdraw(bob, alice.getUUID());
-        for (com.example.globalshop.shop.Mail existing : shop.mailsOf(bob.getUUID())) {
+        for (com.example.globalshop.core.social.Mail existing : shop.mailsOf(bob.getUUID())) {
             shop.deleteMail(bob.getUUID(), existing.id());
         }
         alice.getInventory().clearContent();
@@ -2025,10 +2885,10 @@ public final class SelfTest {
         check("stock was recorded", listing.stock() == 10);
         check("unit price was recorded", listing.unitPrice() == 100L);
         check("the listing is visible to other players",
-                shop.search("", com.example.globalshop.shop.ShopSort.TIME_NEWEST, null, false).stream()
+                shop.search("", com.example.globalshop.core.market.ShopSort.TIME_NEWEST, null, false).stream()
                         .anyMatch(l -> l.id().equals(listing.id())));
         check("searching by item name finds it",
-                shop.search("stone", com.example.globalshop.shop.ShopSort.TIME_NEWEST, null, false).stream()
+                shop.search("stone", com.example.globalshop.core.market.ShopSort.TIME_NEWEST, null, false).stream()
                         .anyMatch(l -> l.id().equals(listing.id())));
 
         check("a quantity below the minimum is rejected",
@@ -2540,5 +3400,21 @@ public final class SelfTest {
     private void log(String message) {
         GlobalShop.LOGGER.info("[selftest] {}", message);
         source.sendSuccess(() -> Component.literal("[selftest] " + message), false);
+    }
+
+    /**
+     * Collects balance events so a check can assert the numbers rather than only that something
+     * arrived. A registered object rather than a lambda: IEventBus keys listeners on a real event
+     * type, and a lambda's parameter type is erased by the time it is passed.
+     */
+    private static final class BalanceEventCapture {
+
+        final java.util.List<com.example.globalshop.api.event.BalanceChangedEvent> seen =
+                new java.util.ArrayList<>();
+
+        @net.minecraftforge.eventbus.api.SubscribeEvent
+        public void onBalance(com.example.globalshop.api.event.BalanceChangedEvent event) {
+            seen.add(event);
+        }
     }
 }

@@ -173,8 +173,28 @@ def build():
 
 if __name__ == "__main__":
     import pathlib
-    target = pathlib.Path(__file__).resolve().parent.parent / "src" / "main" / "resources" / "globalshop.png"
+
+    resources = pathlib.Path(__file__).resolve().parent.parent / "src" / "main" / "resources"
     icon = build()
-    icon.save(target)
-    print("wrote %s  %dx%d  %d bytes" % (target, icon.width, icon.height,
-                                         target.stat().st_size))
+
+    # Written to every place a mod icon is conventionally looked for, because the readers disagree:
+    #
+    #   globalshop.png                  Forge's own mods.toml `logoFile`, which the official docs
+    #                                   require to be at the jar root. This is the one the in-game
+    #                                   Mods screen uses, and the only one that is mandatory.
+    #   assets/globalshop/logo.png      the usual "logo under the mod's asset namespace" spot
+    #   assets/globalshop/icon.png      the same idea under the other common name
+    #
+    # Some launchers (PCL2 among them) resolve a mod's icon as `assets/<modid>/...` rather than at
+    # the root, so an icon that only satisfies Forge can still show as a placeholder in a launcher's
+    # mod list. Three copies of a 36 KB PNG is a cheap way not to have that argument.
+    targets = [
+        resources / "globalshop.png",
+        resources / "assets" / "globalshop" / "logo.png",
+        resources / "assets" / "globalshop" / "icon.png",
+    ]
+    for target in targets:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        icon.save(target)
+        print("wrote %s  %dx%d  %d bytes"
+              % (target, icon.width, icon.height, target.stat().st_size))

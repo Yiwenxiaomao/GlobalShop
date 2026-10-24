@@ -144,17 +144,69 @@ public final class ShopLayout {
     public static final int SIDE_X = 8;
     /** 68 wide, leaving a 3px gap before the backpack's first column at x=79. */
     public static final int SIDE_W = 68;
-    public static final int SIDE_H = 16;
-    public static final int RANKING_BUTTON_Y = 162;
-    public static final int TRADE_LOG_BUTTON_Y = 180;
-    /** Operator only. Sits last in the column so the two player-facing buttons keep the top. */
-    public static final int BLACKLIST_BUTTON_Y = 198;
     /**
-     * The mailbox. Below the blacklist button, still left of x=79 — the hotbar row starts there, so
-     * this part of the column is free all the way down even though the hotbar is at a similar
-     * height.
+     * The side column: ten slots at an 8-pixel pitch, sharing no pixels.
+     *
+     * <p>Halved from 16 at the player's request. Ten features are going in this column and only five
+     * had a place, and the space is fixed — the grid above ends at y=158 and the window at y=240, so
+     * 82 pixels have to hold ten buttons. The pitch must equal the height, or two neighbours overlap
+     * by a pixel and their borders merge into one block; at 8 the ten run from 158 to 238 exactly.
+     *
+     * <p>Five are built and five are reserved below them, each with the slot it will occupy already
+     * named. A slot that has no button yet simply draws nothing, so the reserved room stays visible
+     * as room rather than as five disabled buttons.
      */
-    public static final int MAILBOX_BUTTON_Y = 216;
+    public static final int SIDE_H = 8;
+    public static final int SIDE_PITCH = 8;
+    public static final int RANKING_BUTTON_Y = 158;
+    public static final int TRADE_LOG_BUTTON_Y = 166;
+    /** Operator only. */
+    public static final int BLACKLIST_BUTTON_Y = 174;
+    public static final int MAILBOX_BUTTON_Y = 182;
+    /** The auction house, its own window; see {@code AuctionScreen}. */
+    public static final int AUCTION_BUTTON_Y = 190;
+    /** Reserved: the daily check-in button. */
+    public static final int CHECKIN_BUTTON_Y = 198;
+    /** Reserved: the teleport window — random, or a request to a named player. */
+    public static final int TELEPORT_BUTTON_Y = 206;
+    /** Reserved: the PvP opt-in and its target picker. */
+    public static final int PVP_BUTTON_Y = 214;
+    /** Reserved: the bank — deposits with interest, and loans. */
+    public static final int BANK_BUTTON_Y = 222;
+    /**
+     * The tenth slot: a pager, split down the middle.
+     *
+     * <p>Nine features fit at a readable size and no more, so the column has pages and this last slot
+     * spends itself on the two arrows that move between them. Back on the left, forward on the right,
+     * two pixels apart so they read as two buttons rather than one wide one. Each half is greyed at
+     * the end it cannot go past, which shows a page boundary instead of a click that does nothing.
+     */
+    public static final int PAGER_BUTTON_Y = 230;
+    public static final int PAGER_HALF_W = (SIDE_W - 2) / 2;
+    public static final int PAGER_BACK_X = SIDE_X;
+    public static final int PAGER_FORWARD_X = SIDE_X + SIDE_W - PAGER_HALF_W;
+
+    /** How many pages of features the column has. Page two is where the next ones go. */
+    public static final int COLUMN_PAGES = 2;
+
+    /**
+     * Page two: a four-by-four grid of sixteen places for features that do not exist yet.
+     *
+     * <p>It spans the window, not the column. Cells in the 68 pixels beside the backpack were 16 wide
+     * and read as a row of buttons rather than as places to put things; across the full 304 they are
+     * 75 wide and read as what they are. That covers the backpack's slots, so the grid is drawn after
+     * the container and clicks in its area are swallowed — see ShopScreen.
+     *
+     * <p>Eight rows fill the page rather than four filling its lower half: the same grid mirrored
+     * upwards, which is thirty-two places. They run 10, 37, 64 and so on to 199, each 26 tall, the
+     * last ending at 225 — clear of the pager's row at 230.
+     */
+    public static final int PAGE2_X = SIDE_X;
+    public static final int PAGE2_Y = 10;
+    public static final int PAGE2_COLS = 4;
+    public static final int PAGE2_ROWS = 8;
+    public static final int PAGE2_CELL_W = 75;
+    public static final int PAGE2_CELL_H = 26;
 
     // ---- the blacklist editor's own buttons ---------------------------
     // Two buttons across the panel's 180 pixels: block what is in the slot, or unblock what is
@@ -191,6 +243,18 @@ public final class ShopLayout {
     public static final int TRADE_BUTTON_Y = 208;
     public static final int TRADE_BUTTON_W = 64;
     public static final int TRADE_BUTTON_H = 16;
+
+    /**
+     * The title button, in the lower-right of the market window.
+     *
+     * <p>Not on the row at y=140: that row belongs to the operator's blocklist editor, whose
+     * unblock button reaches across it, and the collision was caught by the layout audit rather than
+     * by eye. This row is clear of every tab, and still in the lower-right of the window.
+     */
+    public static final int TITLE_BUTTON_X = 248;
+    public static final int TITLE_BUTTON_Y = 224;
+    public static final int TITLE_BUTTON_W = 64;
+    public static final int TITLE_BUTTON_H = 16;
 
     private ShopLayout() {
     }

@@ -1,6 +1,6 @@
 package com.example.globalshop;
 
-import com.example.globalshop.economy.MoneyFormat;
+import com.example.globalshop.api.economy.MoneyFormat;
 import net.minecraftforge.common.ForgeConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -144,12 +144,12 @@ public final class Config {
         return listingLifetimeHours() * 3_600_000L;
     }
 
-    /** How many unclaimed deliveries one player's mailbox may hold. */
-    public static int mailboxLimit() {
-        return COMMON == null ? 100 : intOr(COMMON.mailboxLimit, 100);
-    }
-
-    /** How long a mail stays claimable, in real days. */
+    /**
+     * How long a mail stays claimable, in real days.
+     *
+     * <p>This is the mailbox's only bound. There is no capacity limit on it, so mail is deleted by
+     * age rather than by count: whatever arrives is kept, and whatever is older than this goes.
+     */
     public static int mailLifetimeDays() {
         return COMMON == null ? 14 : intOr(COMMON.mailLifetimeDays, 14);
     }
@@ -165,6 +165,174 @@ public final class Config {
 
     public static long vipMillis() {
         return vipDays() * 86_400_000L;
+    }
+
+    /** How many auctions one player may have running at once. */
+    public static int auctionLimit() {
+        return COMMON == null ? 5 : intOr(COMMON.auctionLimit, 5);
+    }
+
+    /**
+     * The longest an auction may run, in real minutes.
+     *
+     * <p>Minutes rather than hours, and five by default. An auction only works if somebody is around
+     * to bid on it, and a sale that needs an audience for hours never gets one — the first version
+     * defaulted to an hour with a ceiling of two days, which nobody was willing to sit through.
+     * Anything that needs to stay on offer for a long time belongs in the fixed-price market.
+     */
+    public static int auctionMaxMinutes() {
+        return COMMON == null ? 5 : intOr(COMMON.auctionMaxMinutes, 5);
+    }
+
+    /**
+     * The price of one ordinary character in a custom title.
+     *
+     * <p>Ordinary means a letter, a digit or a space — {@code Character.isLetterOrDigit} is true for
+     * Chinese just as it is for Latin, so seven Chinese characters and seven letters cost the same.
+     * Priced per character and charged on every save, with nothing owned: a decoration that appears
+     * in front of a player's name in every message is exactly the thing that should take money out
+     * of the economy rather than be bought once.
+     *
+     * <p>In the economy's smallest unit, like every other price in this file.
+     */
+    public static long titleOrdinaryPrice() {
+        return COMMON == null ? 50_000L : COMMON.titleOrdinaryPrice.get();
+    }
+
+    /**
+     * The price of one special character: anything that is not a letter, a digit or a space.
+     *
+     * <p>Five times the ordinary price by default. This is what pays for the decorative pieces —
+     * and it covers the case a character with a line through it is not one character but two, the
+     * letter plus a combining mark, so struck-through text is charged for the marks as well.
+     */
+    public static long titleSpecialPrice() {
+        return COMMON == null ? 250_000L : COMMON.titleSpecialPrice.get();
+    }
+
+    /**
+     * What the first day of the check-in week pays.
+     *
+     * <p>The step as well as the base: day N pays this times N, so Monday pays one step and Sunday
+     * seven. One number rather than two, because a base with a separate increment that happened to
+     * be equal would be two settings describing one curve.
+     */
+    public static long checkinDailyReward() {
+        return COMMON == null ? 5_000L : COMMON.checkinDailyReward.get();
+    }
+
+    /**
+     * The flat fee for making up a missed day of the check-in week.
+     *
+     * <p>Note the consequence of it being flat while the reward grows: from day five onwards the
+     * reward exceeds this fee, so skipping a late day and paying to make it up is profitable. That
+     * is a deliberate trade of consistency for simplicity, and raising this above the seventh day's
+     * reward closes it.
+     */
+    public static long checkinMakeupCost() {
+        return COMMON == null ? 20_000L : COMMON.checkinMakeupCost.get();
+    }
+
+    /** How far a random teleport may throw a player, in blocks. */
+    public static int teleportMaxDistance() {
+        return COMMON == null ? 5000 : intOr(COMMON.teleportMaxDistance, 5000);
+    }
+
+    /** Seconds between one player's random teleports. */
+    public static int teleportCooldownSeconds() {
+        return COMMON == null ? 120 : intOr(COMMON.teleportCooldownSeconds, 120);
+    }
+
+    /**
+     * Seconds between one player's teleports to a named player.
+     *
+     * <p>Separate from the random cooldown, and much shorter: a random jump throws you somewhere
+     * unknown and is worth rationing, while visiting somebody you arranged to visit is a deliberate
+     * act that the other player has already agreed to.
+     */
+    public static int teleportTargetCooldownSeconds() {
+        return COMMON == null ? 30 : intOr(COMMON.teleportTargetCooldownSeconds, 30);
+    }
+
+    /**
+     * What one teleport to a named player costs, in the economy's smallest unit.
+     *
+     * <p>Charged when the teleport happens, not when it is asked for: a request the other player
+     * refuses should not cost the asker anything. Twenty by default — enough to make it a decision
+     * rather than a free way to cross the map, small enough that it is never a real obstacle.
+     */
+    public static long teleportTargetPrice() {
+        return COMMON == null ? 2_000L : COMMON.teleportTargetPrice.get();
+    }
+
+    /**
+     * The stake a duel is fought over.
+     *
+     * <p>Not what the loser pays: they pay this multiplied by a random percentage between the two
+     * settings below. It exists as its own number because the percentage is what varies and the stake
+     * is what it is a percentage of.
+     */
+    public static long pvpStake() {
+        return COMMON == null ? 30_000L : COMMON.pvpStake.get();
+    }
+
+    /** The smallest fraction of the stake a loss can cost, in percent. */
+    public static int pvpLossMinPercent() {
+        return COMMON == null ? 1 : intOr(COMMON.pvpLossMinPercent, 1);
+    }
+
+    /** The largest fraction of the stake a loss can cost, in percent. */
+    public static int pvpLossMaxPercent() {
+        return COMMON == null ? 20 : intOr(COMMON.pvpLossMaxPercent, 20);
+    }
+
+    /**
+     * Whether players may only hurt each other while duelling.
+     *
+     * <p>True by default, which is what "PvP is off by default" means in practice: the mod cancels
+     * damage between two players unless both agreed and named each other. Set it false to put
+     * ordinary unrestricted PvP back while keeping the duelling and its stake.
+     */
+    public static boolean pvpRequiresDuel() {
+        return COMMON == null || COMMON.pvpRequiresDuel.get();
+    }
+
+    /**
+     * What a deposit earns per real day, in basis points. 50 is 0.5 percent.
+     *
+     * <p>Basis points because 0.5 is not a whole number of percent, and interest on money is the one
+     * place a rounding drift is visible. Paid per <em>real</em> day: a deposit left over a shutdown
+     * earns for the shutdown, because real days really did pass.
+     */
+    public static long bankDepositInterestBasisPoints() {
+        return COMMON == null ? 50L : COMMON.bankDepositInterestBasisPoints.get();
+    }
+
+    /**
+     * What a loan charges per game day, in basis points. 200 is 2 percent.
+     *
+     * <p>Charged per <em>game</em> day — twenty minutes of a running server — which is the opposite
+     * clock from a deposit on purpose. A loan does not grow while the server is off, because no game
+     * day passed, so being offline is not a way to be punished for something that did not happen.
+     */
+    public static long bankLoanInterestBasisPoints() {
+        return COMMON == null ? 200L : COMMON.bankLoanInterestBasisPoints.get();
+    }
+
+    /**
+     * The most a player may owe at once.
+     *
+     * <p>A fixed ceiling rather than a multiple of their balance: a limit that grows with what you
+     * have is not a limit, and the point of the number is that a borrower cannot get arbitrarily far
+     * into a hole.
+     */
+    public static long bankLoanLimit() {
+        return COMMON == null ? 500_000L : COMMON.bankLoanLimit.get();
+    }
+
+    /** How long a teleport request stays open before it lapses. */
+    public static int teleportRequestSeconds() {
+        return COMMON == null ? 60 : intOr(COMMON.teleportRequestSeconds, 60);
     }
 
     public static long maxUnitPrice() {
@@ -329,9 +497,26 @@ public final class Config {
         public final ForgeConfigSpec.LongValue vipPrice;
         public final ForgeConfigSpec.IntValue marketCommissionPercent;
         public final ForgeConfigSpec.IntValue listingLifetimeHours;
-        public final ForgeConfigSpec.IntValue mailboxLimit;
         public final ForgeConfigSpec.IntValue mailLifetimeDays;
         public final ForgeConfigSpec.IntValue vipDays;
+        public final ForgeConfigSpec.IntValue auctionLimit;
+        public final ForgeConfigSpec.IntValue auctionMaxMinutes;
+        public final ForgeConfigSpec.LongValue titleOrdinaryPrice;
+        public final ForgeConfigSpec.LongValue titleSpecialPrice;
+        public final ForgeConfigSpec.LongValue checkinDailyReward;
+        public final ForgeConfigSpec.LongValue checkinMakeupCost;
+        public final ForgeConfigSpec.IntValue teleportMaxDistance;
+        public final ForgeConfigSpec.IntValue teleportCooldownSeconds;
+        public final ForgeConfigSpec.IntValue teleportTargetCooldownSeconds;
+        public final ForgeConfigSpec.LongValue teleportTargetPrice;
+        public final ForgeConfigSpec.LongValue pvpStake;
+        public final ForgeConfigSpec.IntValue pvpLossMinPercent;
+        public final ForgeConfigSpec.IntValue pvpLossMaxPercent;
+        public final ForgeConfigSpec.BooleanValue pvpRequiresDuel;
+        public final ForgeConfigSpec.LongValue bankDepositInterestBasisPoints;
+        public final ForgeConfigSpec.LongValue bankLoanInterestBasisPoints;
+        public final ForgeConfigSpec.LongValue bankLoanLimit;
+        public final ForgeConfigSpec.IntValue teleportRequestSeconds;
         public final ForgeConfigSpec.LongValue maxUnitPrice;
         public final ForgeConfigSpec.IntValue maxStock;
         public final ForgeConfigSpec.IntValue maxPerPurchase;
@@ -415,15 +600,6 @@ public final class Config {
                             "the server is switched off too. 0 means listings never expire.")
                     .defineInRange("listingLifetimeHours", 12, 0, 24 * 365);
 
-            mailboxLimit = builder
-                    .comment("How many unclaimed deliveries one player's mailbox may hold.",
-                            "A delivery counts as one, however many stacks it needs. At the limit",
-                            "a purchase that would have to be mailed is refused before any money",
-                            "moves, rather than being delivered onto the floor where a hopper or",
-                            "the despawn timer would destroy it. Expired mail is discarded first,",
-                            "so a full mailbox of lapsed mail clears itself.")
-                    .defineInRange("mailboxLimit", 100, 1, 10_000);
-
             mailLifetimeDays = builder
                     .comment("How long a mail stays claimable, in real days. Measured against the",
                             "wall clock, so mail lapses while the server is off. Lapsed mail",
@@ -436,6 +612,135 @@ public final class Config {
                             "auto-renew on, the same price is charged again when it lapses; if the",
                             "player cannot afford it, auto-renew turns itself off and says so.")
                     .defineInRange("vipDays", 14, 1, 3650);
+
+            auctionLimit = builder
+                    .comment("How many auctions one player may have running at once. Each holds an",
+                            "item and, once it has a bid, somebody's money, so this is what stops",
+                            "one player tying up the whole auction house.")
+                    .defineInRange("auctionLimit", 5, 1, 1000);
+
+            auctionMaxMinutes = builder
+                    .comment("The longest an auction may run, in real minutes. Five by default,",
+                            "because an auction needs an audience and nobody waits hours for one;",
+                            "anything that should stay on offer belongs in the market instead.",
+                            "The end time is an absolute instant on the server clock, so it keeps",
+                            "running while the server is off. The cut taken on a sale is",
+                            "marketCommissionPercent: auctions use the market's tax so the same",
+                            "item cannot be taxed differently depending on which window sold it.")
+                    .defineInRange("auctionMaxMinutes", 5, 1, 60 * 24 * 365);
+
+            titleOrdinaryPrice = builder
+                    .comment("Price of one ordinary character in a custom title, in the economy's",
+                            "smallest unit. Ordinary means a letter, a digit or a space; Chinese",
+                            "counts as a letter, so seven Chinese characters cost the same as seven",
+                            "Latin ones. Charged on every save, because a title is a decoration that",
+                            "appears in front of the player's name in every message they send.")
+                    .defineInRange("titleOrdinaryPrice", 50_000L, 0L, Long.MAX_VALUE);
+
+            titleSpecialPrice = builder
+                    .comment("Price of one special character: anything that is not a letter, a digit",
+                            "or a space. This is what pays for decorative pieces. Note that a",
+                            "character with a line through it is two code points - the letter plus a",
+                            "combining mark - so struck-through text is charged for the marks too.")
+                    .defineInRange("titleSpecialPrice", 250_000L, 0L, Long.MAX_VALUE);
+
+            checkinDailyReward = builder
+                    .comment("What the first day of the weekly check-in pays, in the economy's",
+                            "smallest unit. Day N pays this times N, so the week runs 50, 100, 150,",
+                            "200, 250, 300, 350 by default. Days are real calendar days, so a server",
+                            "that first opens on a Wednesday shows Monday and Tuesday as missed.")
+                    .defineInRange("checkinDailyReward", 5_000L, 0L, Long.MAX_VALUE);
+
+            checkinMakeupCost = builder
+                    .comment("Flat fee for making up a missed day, in the smallest unit. A",
+                            "made-up day pays only half of what it was worth, so catching up is",
+                            "always a net loss: with the defaults the best day of the week returns",
+                            "175 against this 200 fee. Raising the fee, or the halving, only makes",
+                            "that loss larger.")
+                    .defineInRange("checkinMakeupCost", 20_000L, 0L, Long.MAX_VALUE);
+
+            teleportMaxDistance = builder
+                    .comment("How far a random teleport may throw a player, in blocks. The search",
+                            "picks a column in range and asks the world for its surface height, and",
+                            "skips any column that lands in fluid, in lava or with no room above, so",
+                            "a bad roll costs a bounded number of tries. The closest a jump lands",
+                            "is 100 blocks, so it is a journey rather than a shuffle.")
+                    .defineInRange("teleportMaxDistance", 5000, 100, 30_000);
+
+            teleportCooldownSeconds = builder
+                    .comment("Seconds between one player's random teleports. A cooldown is what",
+                            "stops a random jump being used as a free, instant way home: without it",
+                            "the cheapest route across the map is to keep rolling until the dice",
+                            "land near where you wanted to go.")
+                    .defineInRange("teleportCooldownSeconds", 120, 0, 86_400);
+
+            teleportTargetCooldownSeconds = builder
+                    .comment("Seconds between one player's teleports to a named player. Separate",
+                            "from the random cooldown and shorter: a random jump throws you",
+                            "somewhere unknown, while visiting somebody is a deliberate act the",
+                            "other player has already agreed to.")
+                    .defineInRange("teleportTargetCooldownSeconds", 30, 0, 86_400);
+
+            teleportTargetPrice = builder
+                    .comment("What one teleport to a named player costs, in the smallest unit.",
+                            "Charged when the teleport happens, not when it is asked for, so a",
+                            "request that is refused costs the asker nothing. Random jumps are",
+                            "free; it is arriving next to a chosen player that is paid for.")
+                    .defineInRange("teleportTargetPrice", 2_000L, 0L, Long.MAX_VALUE);
+
+            pvpStake = builder
+                    .comment("The stake a duel is fought over, in the smallest unit. The loser pays",
+                            "this multiplied by a random percentage between the two settings below,",
+                            "so the default 300 stake and 1 to 20 percent means a loss between 3",
+                            "and 60. The money is destroyed rather than paid to the winner.")
+                    .defineInRange("pvpStake", 30_000L, 0L, Long.MAX_VALUE);
+
+            pvpLossMinPercent = builder
+                    .comment("The smallest fraction of the stake a loss can cost, in percent. Rolled",
+                            "at the moment of death rather than fixed when the duel starts, so",
+                            "neither player can know what is at stake before the fight.")
+                    .defineInRange("pvpLossMinPercent", 1, 1, 100);
+
+            pvpLossMaxPercent = builder
+                    .comment("The largest fraction of the stake a loss can cost, in percent. A loss",
+                            "is never more than the loser's balance, so a duel cannot leave anybody",
+                            "in debt.")
+                    .defineInRange("pvpLossMaxPercent", 20, 1, 100);
+
+            pvpRequiresDuel = builder
+                    .comment("Whether players may only hurt each other while duelling. True by",
+                            "default, which is what 'PvP is off by default' means in practice. Set it",
+                            "false to put ordinary unrestricted PvP back while keeping duelling.")
+                    .define("pvpRequiresDuel", true);
+
+            bankDepositInterestBasisPoints = builder
+                    .comment("What a deposit earns per real day, in basis points: 50 is 0.5 percent,",
+                            "100 is 1 percent. Paid on the wall clock, so a deposit left over a",
+                            "shutdown earns for the shutdown. Basis points rather than percent",
+                            "because 0.5 is not a whole number and interest on money should not",
+                            "drift by rounding.")
+                    .defineInRange("bankDepositInterestBasisPoints", 50L, 0L, 100_000L);
+
+            bankLoanInterestBasisPoints = builder
+                    .comment("What a loan charges per game day, in basis points: 200 is 2 percent.",
+                            "A game day is twenty minutes of a running server, so a loan does not",
+                            "grow while the server is off - being offline is not a punishment for",
+                            "time that did not pass.")
+                    .defineInRange("bankLoanInterestBasisPoints", 200L, 0L, 100_000L);
+
+            bankLoanLimit = builder
+                    .comment("The most a player may owe at once, in the smallest unit. A fixed",
+                            "ceiling rather than a multiple of their balance: a limit that grows",
+                            "with what you have is not a limit. Interest is added to what is owed",
+                            "and then the wallet is emptied into it, so a debt that cannot be paid",
+                            "keeps charging until it is cleared by earning something.")
+                    .defineInRange("bankLoanLimit", 500_000L, 0L, Long.MAX_VALUE);
+
+            teleportRequestSeconds = builder
+                    .comment("How long a request to teleport to a named player stays open. The",
+                            "player being asked has to agree before anything moves, and a request",
+                            "that has lapsed cannot be accepted.")
+                    .defineInRange("teleportRequestSeconds", 60, 5, 3_600);
 
             maxUnitPrice = builder
                     .comment("Highest allowed price per single item, in minor units.")

@@ -112,6 +112,10 @@ public final class ShopEvents {
         MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
         if (server != null) {
             ShopServices.get(server).renewDueVips();
+            // Deposit and loan interest, on the same cadence. Whole days are what get paid, so a few
+            // minutes of delay costs nothing and this way it happens whether or not anybody is
+            // looking at the window — which is the point of interest.
+            com.example.globalshop.bank.BankServices.get(server).accrueAll();
         }
     }
 
@@ -124,6 +128,13 @@ public final class ShopEvents {
         if (server != null) {
             // Drop the anti-flood throttle state for a player who is gone.
             ShopServices.get(server).forget(player.getUUID());
+            // And any teleport request they were on either end of, so nobody is left waiting on
+            // somebody who has logged out for a request that can no longer be carried out.
+            com.example.globalshop.teleport.TeleportServices.get(server)
+                    .forgetPlayer(player.getUUID());
+            // And end any duel they were in, so the other side is not stuck in one with somebody
+            // who is no longer there.
+            com.example.globalshop.pvp.PvpServices.get(server).forgetPlayer(player.getUUID());
         }
     }
 
@@ -157,6 +168,59 @@ public final class ShopEvents {
         // Drop the per-server caches so nothing survives into the next world load.
         ShopServices.release(server);
         ServerShopServices.release(server);
+        com.example.globalshop.title.TitleServices.release(server);
+        com.example.globalshop.teleport.TeleportServices.release(server);
+        com.example.globalshop.pvp.PvpServices.release(server);
+        com.example.globalshop.bank.BankServices.release(server);
         EconomyServices.release(server);
+    }
+
+    /**
+     * Stops players hurting each other unless they are duelling.
+     *
+     * <p>This is what "PvP is off by default" means in practice: not a label, but damage that does not
+     * happen. Only player against player is touched — everything else in the world is left alone —
+     * and a server that wants ordinary PvP back can turn {@code pvpRequiresDuel} off, after which
+     * this always allows the hit.
+     */
+    @SubscribeEvent
+    public static void onLivingAttack(net.minecraftforge.event.entity.living.LivingAttackEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer victim)) {
+            return;
+        }
+        if (!(event.getSource().getEntity() instanceof ServerPlayer attacker)) {
+            return;
+        }
+        if (!com.example.globalshop.pvp.PvpServices.get(victim)
+                .damageAllowed(attacker.getUUID(), victim.getUUID())) {
+            event.setCanceled(true);
+        }
+    }
+
+    /** Settles a duel: the player who died pays their share of the stake, and the duel ends. */
+    @SubscribeEvent
+    public static void onLivingDeath(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
+        if (event.getEntity() instanceof ServerPlayer loser) {
+            com.example.globalshop.pvp.PvpServices.get(loser).settleDeath(loser);
+        }
+    }
+
+    /**
+     * Puts a player's custom title in front of their name, in brackets.
+     *
+     * <p>Hooked on the display name rather than by rewriting chat text. The display name is what
+     * already names a player in chat, in the tab list and everywhere else, so one hook covers all of
+     * them and there is no chat formatting to get wrong.
+     *
+     * <p>Fires on both sides, so it is guarded to the server: the client has no title book, and the
+     * title it renders arrives in the name the server sent.
+     */
+    @SubscribeEvent
+    public static void onNameFormat(PlayerEvent.NameFormat event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        event.setDisplayname(com.example.globalshop.title.TitleServices.get(player)
+                .decorate(player, event.getDisplayname()));
     }
 }

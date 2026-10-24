@@ -577,7 +577,12 @@ public class TradeScreen extends AbstractContainerScreen<TradeMenu> {
             int y = firstRow + i * TradeLayout.CHAT_LINE_H;
             boolean mine = this.minecraft.player != null
                     && line.from().equals(this.minecraft.player.getUUID());
-            Component text = Component.literal((mine ? "我: " : line.fromName() + ": ") + line.text());
+            // The player's own prefix comes from the language file like everything else. It was
+            // a literal here, which every player saw in every language -- the one string in the
+            // mod that a translation could not reach.
+            Component text = mine
+                    ? Component.translatable("globalshop.trade.me_prefix", line.text())
+                    : Component.literal(line.fromName() + ": " + line.text());
             graphics.drawString(this.font,
                     Component.literal(this.font.plainSubstrByWidth(text.getString(),
                             TradeLayout.CHAT_W - 8)),

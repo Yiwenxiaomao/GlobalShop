@@ -1,0 +1,30 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="${mod_authors}"
+# The icon shown in the mod list. 256x256, drawn by tools/make_mod_icon.py so it can be reproduced
+# and edited rather than being an opaque binary somebody has to open an editor to change.
+logoFile="globalshop.png"
+description='''${mod_description}'''
+
+# The marketplace is entirely server-authoritative. It is not marked as
+# displayTest="IGNORE" because the client and server must run the same version:
+# all listing data is pushed from the server and never trusted from the client.
+[[dependencies.${mod_id}]]
+    modId="forge"
+    mandatory=true
+    versionRange="${forge_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
